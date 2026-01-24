@@ -1,0 +1,150 @@
+---
+// --- Server Side (Runs on Cloudflare) ---
+
+// 1. Fetch Live Data from Free Open Source API
+const API_URL = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json";
+
+let goldPrice = 0;
+let silverPrice = 0;
+let dateOfData = "";
+
+try {
+  const response = await fetch(API_URL);
+  const data = await response.json();
+  
+  // API returns "Units of Gold per USD". We invert for "USD per Unit".
+  goldPrice = 1 / data.usd.xau;
+  silverPrice = 1 / data.usd.xag;
+  dateOfData = data.date; 
+} catch (e) {
+  // Fallback if API is down
+  goldPrice = 2500.00; 
+  silverPrice = 30.00;
+  dateOfData = "Estimate";
+}
+
+// 2. Historical Data (Average Closing Price by Year)
+const historicalData = {
+  2010: { gold: 1224, silver: 20.19 },
+  2011: { gold: 1571, silver: 35.12 },
+  2012: { gold: 1668, silver: 31.15 },
+  2013: { gold: 1411, silver: 23.79 },
+  2014: { gold: 1266, silver: 19.08 },
+  2015: { gold: 1160, silver: 15.68 },
+  2016: { gold: 1250, silver: 17.14 },
+  2017: { gold: 1257, silver: 17.04 },
+  2018: { gold: 1268, silver: 15.71 },
+  2019: { gold: 1392, silver: 16.21 },
+  2020: { gold: 1769, silver: 20.55 },
+  2021: { gold: 1798, silver: 25.14 },
+  2022: { gold: 1801, silver: 21.76 },
+  2023: { gold: 1940, silver: 23.35 },
+  2024: { gold: 2350, silver: 28.50 },
+  2025: { gold: 2650, silver: 32.00 },
+};
+
+// Handle 2026 (Current Year) - assumes bought at today's price
+const currentYear = new Date().getFullYear();
+historicalData[currentYear] = { gold: goldPrice, silver: silverPrice };
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Metal Wealth Tracker</title>
+    <style>
+      :root { --bg: #f3f4f6; --card: #fff; --gold: #d4af37; --silver: #9ca3af; --btn: #1f2937; }
+      body { font-family: system-ui, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; color: #111; }
+      .app { background: var(--card); padding: 2rem; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); width: 100%; max-width: 500px; }
+      h1 { text-align: center; margin: 0 0 5px 0; font-size: 1.6rem; }
+      .sub { text-align: center; font-size: 0.8rem; color: #666; margin-bottom: 25px; }
+      
+      .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 25px; }
+      .price-card { background: #f9fafb; padding: 1rem; border-radius: 10px; text-align: center; border: 1px solid #e5e7eb; }
+      .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #666; }
+      .value { font-size: 1.3rem; font-weight: 700; margin-top: 5px; }
+      
+      .input-group { border-top: 1px solid #e5e7eb; padding-top: 1.5rem; margin-top: 1.5rem; }
+      .group-title { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 10px; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; }
+      .row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
+      
+      input { padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 16px; }
+      button { background: var(--btn); color: white; border: none; padding: 16px; width: 100%; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 25px; font-size: 1rem; }
+      button:hover { opacity: 0.9; }
+
+      .result { margin-top: 10px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 0.9rem; display: none; }
+      .result.show { display: block; }
+      .gain { color: #059669; font-weight: bold; }
+      .loss { color: #dc2626; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <h1>Precious Metals</h1>
+      <div class="sub">Live Data Date: {dateOfData}</div>
+
+      <div class="dashboard">
+        <div class="price-card">
+          <div class="label">Gold Price</div>
+          <div class="value" style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
+        </div>
+        <div class="price-card">
+          <div class="label">Silver Price</div>
+          <div class="value" style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <div class="group-title"><div class="dot" style="background:var(--gold)"></div> Gold Holdings</div>
+        <div class="row">
+          <input type="number" step="0.01" id="goldOz" placeholder="Ounces" />
+          <input type="number" id="goldYear" placeholder="Year" min="2010" max="2026" />
+        </div>
+        <div id="goldRes" class="result"></div>
+      </div>
+
+      <div class="input-group">
+        <div class="group-title"><div class="dot" style="background:var(--silver)"></div> Silver Holdings</div>
+        <div class="row">
+          <input type="number" step="0.01" id="silverOz" placeholder="Ounces" />
+          <input type="number" id="silverYear" placeholder="Year" min="2010" max="2026" />
+        </div>
+        <div id="silverRes" class="result"></div>
+      </div>
+
+      <button id="calcBtn">Calculate Value</button>
+    </div>
+
+    <script define:vars={{ goldPrice, silverPrice, historicalData }}>
+      document.getElementById('calcBtn').addEventListener('click', () => {
+        calc('gold', goldPrice);
+        calc('silver', silverPrice);
+      });
+
+      function calc(metal, price) {
+        const oz = parseFloat(document.getElementById(metal+'Oz').value);
+        const year = document.getElementById(metal+'Year').value;
+        const res = document.getElementById(metal+'Res');
+
+        if (!oz) { res.classList.remove('show'); return; }
+
+        let html = `<div>Current Value: <strong>$${(oz * price).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>`;
+
+        if (year && historicalData[year]) {
+          const oldPrice = historicalData[year][metal];
+          const diff = (oz * price) - (oz * oldPrice);
+          const isGain = diff >= 0;
+          const pct = ((diff / (oz * oldPrice)) * 100).toFixed(1);
+
+          html += `<div style="margin-top:5px; font-size:0.85em; color:#666">Bought in ${year} @ ~$${oldPrice.toFixed(0)}</div>`;
+          html += `<div style="margin-top:2px;">Return: <span class="${isGain ? 'gain':'loss'}">${isGain?'+':''}$${diff.toLocaleString(undefined, {minimumFractionDigits:2})} (${isGain?'+':''}${pct}%)</span></div>`;
+        }
+        
+        res.innerHTML = html;
+        res.classList.add('show');
+      }
+    </script>
+  </body>
+</html>
