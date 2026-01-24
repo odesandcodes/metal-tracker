@@ -72,36 +72,36 @@ const historicalData = {
       :root { --bg: #f4f4f9; --card: #ffffff; --gold: #d4af37; --silver: #7f8c8d; --text: #333; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
       
-      /* MAIN LAYOUT ENGINE */
+      /* LAYOUT ENGINE */
       .dashboard { 
-        width: 100%; max-width: 900px; 
+        width: 100%; max-width: 960px; 
         display: flex; flex-direction: column; gap: 15px; 
       }
       
-      /* Desktop: Side-by-Side */
+      /* DESKTOP: 1.8fr vs 1fr (Charts are much narrower) */
       @media (min-width: 768px) {
-        .dashboard { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+        .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; }
         .header-section { grid-column: 1 / -1; }
         .footer-section { grid-column: 1 / -1; }
       }
 
-      /* GLOBAL STYLES */
+      /* GLOBAL CARD */
       .card { background: var(--card); padding: 1.5rem; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
+      
       h1 { margin: 0; font-size: 1.5rem; text-align: center; color: #222; }
       .badge { display: block; text-align: center; font-size: 0.75rem; color: #888; margin-top: 5px; background: #fff; padding: 4px 10px; border-radius: 20px; width: fit-content; margin: 5px auto 15px auto; }
 
-      /* PRICE BANNERS (Top of Calculator) */
+      /* Live Price Grid */
       .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
       .price-item { background: #fafafa; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #eee; }
       .lbl { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: #999; letter-spacing: 0.5px; }
       .val { font-size: 1.2rem; font-weight: 700; margin-top: 2px; }
 
-      /* CALCULATOR INPUTS */
-      .input-group { margin-bottom: 20px; }
-      .group-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+      /* Calculator */
+      .input-group { margin-bottom: 15px; }
+      .group-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
       .dot { width: 8px; height: 8px; border-radius: 50%; }
       .input-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
-      
       input { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px; box-sizing: border-box; background: #fff; -webkit-appearance: none; }
       input:focus { outline: 2px solid #333; border-color: transparent; }
       
@@ -109,21 +109,27 @@ const historicalData = {
       .res-box.visible { display: block; animation: slideDown 0.2s ease-out; }
       .up { color: #16a34a; font-weight: 700; }
       .down { color: #dc2626; font-weight: 700; }
+      button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
 
-      button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 10px; }
-      button:active { transform: scale(0.98); }
-
-      /* CHARTS (Right Column / Bottom Mobile) */
-      .chart-stack { display: flex; flex-direction: column; gap: 15px; height: 100%; }
-      .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
+      /* CHARTS: COMPACT MODE */
+      .chart-stack { display: flex; flex-direction: column; gap: 15px; }
       
-      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.85rem; font-weight: 700; color: #555; }
-      .svg-container { flex-grow: 1; position: relative; min-height: 100px; }
+      .chart-card { 
+        background: var(--card); border-radius: 16px; 
+        padding: 1rem; /* Less padding = Shorter card */
+        flex: 1; display: flex; flex-direction: column; justify-content: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); 
+      }
+      
+      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 0.8rem; font-weight: 700; color: #555; }
+      
+      /* Fixed small height for the chart area */
+      .svg-container { flex-grow: 1; position: relative; height: 60px; min-height: 60px; }
+      
       svg { width: 100%; height: 100%; overflow: visible; }
-      polyline { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+      polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 
-      /* FOOTER */
-      .legal { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 30px; line-height: 1.4; padding: 0 10px; }
+      .legal { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 20px; line-height: 1.4; }
 
       @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -197,8 +203,7 @@ const historicalData = {
       </div>
 
       <div class="footer-section legal">
-        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data may be delayed. 
-        No data is stored; calculations are local.
+        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data may be delayed.
       </div>
 
     </div>
