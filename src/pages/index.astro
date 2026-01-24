@@ -78,7 +78,6 @@ const historicalData = {
         display: flex; flex-direction: column; gap: 15px; 
       }
       
-      /* DESKTOP: 1.8fr vs 1fr */
       @media (min-width: 768px) {
         .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; }
         .header-section { grid-column: 1 / -1; }
@@ -105,27 +104,22 @@ const historicalData = {
       input { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px; box-sizing: border-box; background: #fff; -webkit-appearance: none; }
       input:focus { outline: 2px solid #333; border-color: transparent; }
       
-      .res-box { margin-top: 8px; font-size: 0.85rem; padding: 10px; background: #f8f9fa; border-radius: 8px; display: none; line-height: 1.4; }
+      .res-box { margin-top: 8px; font-size: 0.85rem; padding: 12px; background: #f8f9fa; border-radius: 8px; display: none; line-height: 1.6; }
       .res-box.visible { display: block; animation: slideDown 0.2s ease-out; }
       .up { color: #16a34a; font-weight: 700; }
       .down { color: #dc2626; font-weight: 700; }
       button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
 
-      /* CHARTS: BALANCED MODE */
+      /* CHARTS */
       .chart-stack { display: flex; flex-direction: column; gap: 15px; }
-      
       .chart-card { 
         background: var(--card); border-radius: 16px; 
-        padding: 1.2rem; /* Comfortable padding */
+        padding: 1.2rem; 
         flex: 1; display: flex; flex-direction: column; justify-content: center;
         box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); 
       }
-      
       .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
-      
-      /* CHANGED: Increased from 60px to 120px for better visibility */
       .svg-container { flex-grow: 1; position: relative; height: 120px; min-height: 120px; }
-      
       svg { width: 100%; height: 100%; overflow: visible; }
       polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 
@@ -137,7 +131,6 @@ const historicalData = {
   <body>
 
     <div class="dashboard">
-      
       <div class="header-section">
         <h1>Metal Tracker</h1>
         <span class="badge">Market Data: {dateOfData}</span>
@@ -205,7 +198,6 @@ const historicalData = {
       <div class="footer-section legal">
         <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data may be delayed.
       </div>
-
     </div>
 
     <script define:vars={{ goldPrice, silverPrice, historicalData }}>
@@ -225,16 +217,29 @@ const historicalData = {
         if (!oz) { resEl.classList.remove('visible'); return; }
 
         const total = oz * price;
-        let html = `<div>Value: <strong>$${total.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>`;
+        const totalFormatted = total.toLocaleString(undefined, {minimumFractionDigits: 2});
+        
+        // 1. Show Current Value
+        let html = `<div>Current Value: <strong>$${totalFormatted}</strong></div>`;
 
         if (year && historicalData[year]) {
-          const old = historicalData[year][type];
-          const diff = total - (oz * old);
+          const oldPrice = historicalData[year][type];
+          const originalCost = oz * oldPrice;
+          const diff = total - originalCost;
           const isUp = diff >= 0;
-          const pct = ((diff / (oz * old)) * 100).toFixed(1);
           
-          html += `<div style="margin-top:4px; color:#666; font-size:0.8em">Bought ${year} @ ~$${old.toFixed(0)}</div>`;
-          html += `<div style="margin-top:2px;">Return: <span class="${isUp?'up':'down'}">${isUp?'+':''}$${diff.toLocaleString(undefined, {minimumFractionDigits:2})} (${isUp?'+':''}${pct}%)</span></div>`;
+          // 2. Formatting numbers
+          const diffStr = Math.abs(diff).toLocaleString(undefined, {minimumFractionDigits: 2});
+          const pct = ((diff / originalCost) * 100).toFixed(1);
+          
+          // 3. Show History and Explicit Gain/Loss
+          html += `<div style="font-size:0.85em; color:#666; margin-top:5px;">History: Bought ${year}</div>`;
+          html += `<div style="margin-top:2px; font-weight:600;">
+            ${isUp ? 'Profit' : 'Loss'}: 
+            <span class="${isUp?'up':'down'}">
+              ${isUp?'+':'-'}$${diffStr} (${isUp?'+':''}${pct}%)
+            </span>
+          </div>`;
         }
         resEl.innerHTML = html;
         resEl.classList.add('visible');
