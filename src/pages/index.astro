@@ -1,69 +1,47 @@
 ---
 // --- Server Side (Runs on Cloudflare) ---
 
-// 1. Fetch Current Prices (Open Source API)
 const PRICE_API = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json";
-
-// 2. Fetch History for Charts (Yahoo Finance - 1 Month)
 const CHART_API_GOLD = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1d";
 const CHART_API_SILVER = "https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1mo&interval=1d";
 
-let goldPrice = 0;
-let silverPrice = 0;
-let dateOfData = "";
-let goldPoints = ""; // SVG polygon points
-let silverPoints = "";
+let goldPrice = 0, silverPrice = 0, dateOfData = "";
+let goldPoints = "", silverPoints = "";
 
-// Helper to fetch chart data with a fake User-Agent (Yahoo requires this)
 async function getChartData(url) {
   try {
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!res.ok) return null;
     const json = await res.json();
-    return json.chart.result[0].indicators.quote[0].close; // Array of prices
+    return json.chart.result[0].indicators.quote[0].close;
   } catch (e) { return null; }
 }
 
-// Helper to convert price array into SVG points
 function makeSparkline(data) {
   if (!data || data.length < 2) return "";
-  const validData = data.filter(n => n); // Remove nulls
-  const min = Math.min(...validData);
-  const max = Math.max(...validData);
-  const range = max - min;
-  
-  // Map prices to 0-100 coordinates
-  return validData.map((price, index) => {
-    const x = (index / (validData.length - 1)) * 100; // X is percentage of width
-    const y = 100 - ((price - min) / range) * 100;    // Y is inverted (0 is top)
+  const valid = data.filter(n => n);
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  return valid.map((p, i) => {
+    const x = (i / (valid.length - 1)) * 100;
+    const y = 100 - ((p - min) / (max - min)) * 100;
     return `${x},${y}`;
   }).join(" ");
 }
 
 try {
-  // Parallel Fetching for speed
-  const [priceRes, goldChartData, silverChartData] = await Promise.all([
-    fetch(PRICE_API),
-    getChartData(CHART_API_GOLD),
-    getChartData(CHART_API_SILVER)
+  const [priceRes, goldChart, silverChart] = await Promise.all([
+    fetch(PRICE_API), getChartData(CHART_API_GOLD), getChartData(CHART_API_SILVER)
   ]);
-
-  // Process Live Price
-  const priceData = await priceRes.json();
-  goldPrice = 1 / priceData.usd.xau;
-  silverPrice = 1 / priceData.usd.xag;
-  dateOfData = priceData.date;
-
-  // Process Charts
-  goldPoints = makeSparkline(goldChartData);
-  silverPoints = makeSparkline(silverChartData);
-
+  const data = await priceRes.json();
+  goldPrice = 1 / data.usd.xau;
+  silverPrice = 1 / data.usd.xag;
+  dateOfData = data.date;
+  goldPoints = makeSparkline(goldChart);
+  silverPoints = makeSparkline(silverChart);
 } catch (e) {
-  console.error(e);
-  goldPrice = 2500.00; silverPrice = 30.00; // Fallbacks
+  goldPrice = 2500; silverPrice = 30; // Fallback
 }
 
-// Historical Averages
 const historicalData = {
   2010: { gold: 1224, silver: 20.19 },
   2011: { gold: 1571, silver: 35.12 },
@@ -88,129 +66,173 @@ const historicalData = {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Metal Wealth Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Metal Dashboard</title>
     <style>
-      :root { --bg: #f8f9fa; --card: #ffffff; --gold: #d4af37; --silver: #7f8c8d; --text: #2c3e50; }
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+      :root { --bg: #f4f4f9; --card: #ffffff; --gold: #d4af37; --silver: #7f8c8d; --text: #333; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
       
-      .app-container { background: var(--card); width: 100%; max-width: 480px; padding: 2rem; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+      /* MAIN LAYOUT ENGINE */
+      .dashboard { 
+        width: 100%; max-width: 900px; 
+        display: flex; flex-direction: column; gap: 15px; 
+      }
       
-      h1 { text-align: center; margin: 0; font-size: 1.5rem; letter-spacing: -0.5px; }
-      .badge { font-size: 0.75rem; color: #999; text-align: center; margin-bottom: 20px; display: block; margin-top: 5px; }
+      /* Desktop: Side-by-Side */
+      @media (min-width: 768px) {
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+        .header-section { grid-column: 1 / -1; }
+        .footer-section { grid-column: 1 / -1; }
+      }
 
-      /* Chart & Price Card */
-      .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
-      .stat-card { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 15px; position: relative; overflow: hidden; }
-      
-      .stat-label { font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: #999; margin-bottom: 5px; position: relative; z-index: 2; }
-      .stat-value { font-size: 1.4rem; font-weight: 700; position: relative; z-index: 2; }
-      .gold-txt { color: var(--gold); }
-      .silver-txt { color: var(--silver); }
-      
-      /* Sparkline SVG behind text */
-      .chart-svg { position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; opacity: 0.2; z-index: 1; pointer-events: none; }
-      .chart-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+      /* GLOBAL STYLES */
+      .card { background: var(--card); padding: 1.5rem; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
+      h1 { margin: 0; font-size: 1.5rem; text-align: center; color: #222; }
+      .badge { display: block; text-align: center; font-size: 0.75rem; color: #888; margin-top: 5px; background: #fff; padding: 4px 10px; border-radius: 20px; width: fit-content; margin: 5px auto 15px auto; }
 
-      /* Calculator */
-      .section-title { font-size: 0.9rem; font-weight: 700; margin: 20px 0 10px 0; display: flex; align-items: center; gap: 8px; }
-      .dot { width: 10px; height: 10px; border-radius: 50%; }
-      
+      /* PRICE BANNERS (Top of Calculator) */
+      .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+      .price-item { background: #fafafa; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #eee; }
+      .lbl { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: #999; letter-spacing: 0.5px; }
+      .val { font-size: 1.2rem; font-weight: 700; margin-top: 2px; }
+
+      /* CALCULATOR INPUTS */
+      .input-group { margin-bottom: 20px; }
+      .group-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; }
       .input-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
-      input { width: 100%; padding: 12px; border: 1px solid #e1e4e8; border-radius: 8px; font-size: 1rem; box-sizing: border-box; -webkit-appearance: none; }
+      
+      input { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px; box-sizing: border-box; background: #fff; -webkit-appearance: none; }
       input:focus { outline: 2px solid #333; border-color: transparent; }
       
-      .result-box { background: #f1f3f5; padding: 12px; border-radius: 8px; margin-top: 10px; font-size: 0.9rem; display: none; }
-      .result-box.active { display: block; animation: popIn 0.3s ease; }
-      .profit { color: #27ae60; font-weight: bold; }
-      .loss { color: #c0392b; font-weight: bold; }
+      .res-box { margin-top: 8px; font-size: 0.85rem; padding: 10px; background: #f8f9fa; border-radius: 8px; display: none; line-height: 1.4; }
+      .res-box.visible { display: block; animation: slideDown 0.2s ease-out; }
+      .up { color: #16a34a; font-weight: 700; }
+      .down { color: #dc2626; font-weight: 700; }
 
-      button { background: #222; color: white; border: none; padding: 16px; width: 100%; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 25px; }
-      button:hover { opacity: 0.9; }
+      button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 10px; }
+      button:active { transform: scale(0.98); }
 
-      /* Footer / Disclaimer */
-      .disclaimer { margin-top: 40px; font-size: 0.7rem; color: #aaa; text-align: center; line-height: 1.5; max-width: 450px; }
+      /* CHARTS (Right Column / Bottom Mobile) */
+      .chart-stack { display: flex; flex-direction: column; gap: 15px; height: 100%; }
+      .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
       
-      @keyframes popIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.85rem; font-weight: 700; color: #555; }
+      .svg-container { flex-grow: 1; position: relative; min-height: 100px; }
+      svg { width: 100%; height: 100%; overflow: visible; }
+      polyline { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+
+      /* FOOTER */
+      .legal { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 30px; line-height: 1.4; padding: 0 10px; }
+
+      @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </head>
   <body>
-    <div class="app-container">
-      <h1>Precious Metals</h1>
-      <span class="badge">Data: {dateOfData} • 30 Day Trend</span>
 
-      <div class="card-grid">
-        <div class="stat-card">
-          <div class="stat-label">Gold / oz</div>
-          <div class="stat-value gold-txt">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
-          <svg class="chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <polyline points={goldPoints} class="chart-line" stroke="#d4af37" />
-          </svg>
+    <div class="dashboard">
+      
+      <div class="header-section">
+        <h1>Metal Tracker</h1>
+        <span class="badge">Market Data: {dateOfData}</span>
+      </div>
+
+      <div class="card">
+        <div class="price-grid">
+          <div class="price-item">
+            <div class="lbl">Gold / oz</div>
+            <div class="val" style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
+          </div>
+          <div class="price-item">
+            <div class="lbl">Silver / oz</div>
+            <div class="val" style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
+          </div>
         </div>
 
-        <div class="stat-card">
-          <div class="stat-label">Silver / oz</div>
-          <div class="stat-value silver-txt">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
-          <svg class="chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <polyline points={silverPoints} class="chart-line" stroke="#7f8c8d" />
-          </svg>
+        <div class="input-group">
+          <div class="group-label"><div class="dot" style="background:var(--gold)"></div> Gold Holdings</div>
+          <div class="input-row">
+            <input type="number" step="0.01" id="goldOz" placeholder="Ounces" />
+            <input type="number" id="goldYear" placeholder="Year" min="2010" max="2026" />
+          </div>
+          <div id="goldRes" class="res-box"></div>
+        </div>
+
+        <div class="input-group">
+          <div class="group-label"><div class="dot" style="background:var(--silver)"></div> Silver Holdings</div>
+          <div class="input-row">
+            <input type="number" step="0.01" id="silverOz" placeholder="Ounces" />
+            <input type="number" id="silverYear" placeholder="Year" min="2010" max="2026" />
+          </div>
+          <div id="silverRes" class="res-box"></div>
+        </div>
+
+        <button id="calcBtn">Calculate Value</button>
+      </div>
+
+      <div class="chart-stack">
+        <div class="chart-card">
+          <div class="chart-header">
+            <span>Gold (30D)</span>
+            <span style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              <polyline points={goldPoints} stroke="#d4af37" />
+            </svg>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <span>Silver (30D)</span>
+            <span style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              <polyline points={silverPoints} stroke="#7f8c8d" />
+            </svg>
+          </div>
         </div>
       </div>
 
-      <div>
-        <div class="section-title"><div class="dot" style="background:var(--gold)"></div> Your Gold</div>
-        <div class="input-row">
-          <input type="number" step="0.01" id="goldOz" placeholder="Ounces" />
-          <input type="number" id="goldYear" placeholder="Year" min="2010" max="2026" />
-        </div>
-        <div id="goldResult" class="result-box"></div>
-
-        <div class="section-title"><div class="dot" style="background:var(--silver)"></div> Your Silver</div>
-        <div class="input-row">
-          <input type="number" step="0.01" id="silverOz" placeholder="Ounces" />
-          <input type="number" id="silverYear" placeholder="Year" min="2010" max="2026" />
-        </div>
-        <div id="silverResult" class="result-box"></div>
+      <div class="footer-section legal">
+        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data may be delayed. 
+        No data is stored; calculations are local.
       </div>
 
-      <button id="calcBtn">Calculate Value</button>
     </div>
-
-    <footer class="disclaimer">
-      <strong>DISCLAIMER: FOR EDUCATIONAL PURPOSES ONLY.</strong><br/>
-      This application does not provide financial advice. All data is estimated and may be delayed or inaccurate. 
-      We do not store any user data; all calculations happen in your browser. 
-      Use at your own risk.
-    </footer>
 
     <script define:vars={{ goldPrice, silverPrice, historicalData }}>
       document.getElementById('calcBtn').addEventListener('click', () => {
-        calc('gold', goldPrice);
-        calc('silver', silverPrice);
+        runCalc('gold', goldPrice);
+        runCalc('silver', silverPrice);
       });
 
-      function calc(type, currentPrice) {
-        const oz = parseFloat(document.getElementById(type+'Oz').value);
-        const year = document.getElementById(type+'Year').value;
-        const box = document.getElementById(type+'Result');
+      function runCalc(type, price) {
+        const ozEl = document.getElementById(type+'Oz');
+        const yearEl = document.getElementById(type+'Year');
+        const resEl = document.getElementById(type+'Res');
+        
+        const oz = parseFloat(ozEl.value);
+        const year = yearEl.value;
 
-        if (!oz) { box.classList.remove('active'); return; }
+        if (!oz) { resEl.classList.remove('visible'); return; }
 
-        const val = oz * currentPrice;
-        let html = `<div>Value: <strong>$${val.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>`;
+        const total = oz * price;
+        let html = `<div>Value: <strong>$${total.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>`;
 
         if (year && historicalData[year]) {
-          const oldPrice = historicalData[year][type];
-          const diff = val - (oz * oldPrice);
+          const old = historicalData[year][type];
+          const diff = total - (oz * old);
           const isUp = diff >= 0;
-          const pct = ((diff / (oz * oldPrice)) * 100).toFixed(1);
+          const pct = ((diff / (oz * old)) * 100).toFixed(1);
           
-          html += `<div style="margin-top:5px; font-size:0.85em; color:#666">Bought ${year} @ ~$${oldPrice.toFixed(0)}</div>`;
-          html += `<div style="margin-top:2px;">Return: <span class="${isUp?'profit':'loss'}">${isUp?'+':''}$${diff.toLocaleString(undefined, {minimumFractionDigits:2})} (${isUp?'+':''}${pct}%)</span></div>`;
+          html += `<div style="margin-top:4px; color:#666; font-size:0.8em">Bought ${year} @ ~$${old.toFixed(0)}</div>`;
+          html += `<div style="margin-top:2px;">Return: <span class="${isUp?'up':'down'}">${isUp?'+':''}$${diff.toLocaleString(undefined, {minimumFractionDigits:2})} (${isUp?'+':''}${pct}%)</span></div>`;
         }
-        
-        box.innerHTML = html;
-        box.classList.add('active');
+        resEl.innerHTML = html;
+        resEl.classList.add('visible');
       }
     </script>
   </body>
