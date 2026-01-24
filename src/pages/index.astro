@@ -78,7 +78,7 @@ const historicalData = {
         display: flex; flex-direction: column; gap: 15px; 
       }
       
-      /* DESKTOP: 1.8fr vs 1fr (Charts are much narrower) */
+      /* DESKTOP: 1.8fr vs 1fr */
       @media (min-width: 768px) {
         .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; }
         .header-section { grid-column: 1 / -1; }
@@ -111,20 +111,20 @@ const historicalData = {
       .down { color: #dc2626; font-weight: 700; }
       button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
 
-      /* CHARTS: COMPACT MODE */
+      /* CHARTS: BALANCED MODE */
       .chart-stack { display: flex; flex-direction: column; gap: 15px; }
       
       .chart-card { 
         background: var(--card); border-radius: 16px; 
-        padding: 1rem; /* Less padding = Shorter card */
+        padding: 1.2rem; /* Comfortable padding */
         flex: 1; display: flex; flex-direction: column; justify-content: center;
         box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); 
       }
       
-      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 0.8rem; font-weight: 700; color: #555; }
+      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
       
-      /* Fixed small height for the chart area */
-      .svg-container { flex-grow: 1; position: relative; height: 60px; min-height: 60px; }
+      /* CHANGED: Increased from 60px to 120px for better visibility */
+      .svg-container { flex-grow: 1; position: relative; height: 120px; min-height: 120px; }
       
       svg { width: 100%; height: 100%; overflow: visible; }
       polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
@@ -159,7 +159,7 @@ const historicalData = {
           <div class="group-label"><div class="dot" style="background:var(--gold)"></div> Gold Holdings</div>
           <div class="input-row">
             <input type="number" step="0.01" id="goldOz" placeholder="Ounces" />
-            <input type="number" id="goldYear" placeholder="Year" min="2010" max="2026" />
+            <input type="number" id="goldYear" placeholder="Year Purchased" min="2010" max="2026" />
           </div>
           <div id="goldRes" class="res-box"></div>
         </div>
@@ -168,7 +168,7 @@ const historicalData = {
           <div class="group-label"><div class="dot" style="background:var(--silver)"></div> Silver Holdings</div>
           <div class="input-row">
             <input type="number" step="0.01" id="silverOz" placeholder="Ounces" />
-            <input type="number" id="silverYear" placeholder="Year" min="2010" max="2026" />
+            <input type="number" id="silverYear" placeholder="Year Purchased" min="2010" max="2026" />
           </div>
           <div id="silverRes" class="res-box"></div>
         </div>
