@@ -1,55 +1,50 @@
 ---
 // --- Server Side (Runs on Cloudflare) ---
 
-// 1. PRIMARY SOURCE (Yahoo: Real-time, Weekend Data, Charts)
-const Y_GOLD = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?range=1mo&interval=1d";
-const Y_SILVER = "https://query1.finance.yahoo.com/v8/finance/chart/XAGUSD=X?range=1mo&interval=1d";
+// DATA SOURCE: CoinGecko Public API
+// We use tokens that track physical metals to get 24/7 pricing and historical data.
+// PAXG = Paxos Gold (1 oz Gold)
+// KAG = Kinesis Silver (1 oz Silver)
 
-// 2. BACKUP SOURCE (Jsdelivr: Daily updates, very reliable, no blocks)
-const BACKUP_API = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json";
+const GOLD_URL = "https://api.coingecko.com/api/v3/coins/pax-gold/market_chart?vs_currency=usd&days=30";
+const SILVER_URL = "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=30";
 
 let goldPrice = 0, silverPrice = 0, dateOfData = "";
 let goldPoints = "", silverPoints = "";
 let chartAvailable = false;
 
-// Helper: Real-looking Browser Header to bypass blocks
-const HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
-};
-
-async function getYahooData(url) {
+// Helper: Fetch Clean API Data
+async function getMetalData(url) {
   try {
-    const res = await fetch(url, { headers: HEADERS });
-    if (!res.ok) throw new Error(res.statusText);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("API Limit or Error");
     const json = await res.json();
-    const result = json.chart.result[0];
-    const price = result.meta.regularMarketPrice;
-    const quotes = result.indicators.quote[0].close;
-    const points = makeSparkline(quotes);
-    return { price, points, success: true };
+    
+    // CoinGecko returns "prices" as an array of [timestamp, price]
+    const prices = json.prices.map(p => p[1]);
+    
+    // 1. Current Price is the last item in the array
+    const currentPrice = prices[prices.length - 1];
+    
+    // 2. Generate Chart Points
+    const points = makeSparkline(prices);
+    
+    return { price: currentPrice, points, success: true };
   } catch (e) {
-    return { success: false }; // Fail silently so we can use backup
+    return { success: false };
   }
 }
 
-async function getBackupPrices() {
-  try {
-    const res = await fetch(BACKUP_API);
-    const data = await res.json();
-    return { 
-      gold: 1 / data.usd.xau, 
-      silver: 1 / data.usd.xag,
-      date: data.date 
-    };
-  } catch (e) { return null; }
-}
-
+// Helper: Create SVG Polygon
 function makeSparkline(data) {
   if (!data || data.length < 2) return "";
-  const valid = data.filter(n => n);
+  // Downsample to ~100 points to keep SVG light
+  const step = Math.ceil(data.length / 100);
+  const valid = data.filter((_, i) => i % step === 0);
+  
   const min = Math.min(...valid);
   const max = Math.max(...valid);
+  
   return valid.map((p, i) => {
     const x = (i / (valid.length - 1)) * 100;
     const y = 100 - ((p - min) / (max - min)) * 100;
@@ -57,34 +52,25 @@ function makeSparkline(data) {
   }).join(" ");
 }
 
-// --- MAIN LOGIC ---
-// 1. Try Yahoo First (Best Data)
-const [gData, sData] = await Promise.all([getYahooData(Y_GOLD), getYahooData(Y_SILVER)]);
+// --- MAIN EXECUTION ---
+const [gData, sData] = await Promise.all([
+  getMetalData(GOLD_URL),
+  getMetalData(SILVER_URL)
+]);
 
 if (gData.success && sData.success) {
-  // PLAN A: Yahoo worked!
   goldPrice = gData.price;
   silverPrice = sData.price;
   goldPoints = gData.points;
   silverPoints = sData.points;
   chartAvailable = true;
-  dateOfData = "Live (Spot)";
+  dateOfData = "Live (24/7 Market)";
 } else {
-  // PLAN B: Yahoo blocked us. Use Backup for Price.
-  const backup = await getBackupPrices();
-  if (backup) {
-    goldPrice = backup.gold;
-    silverPrice = backup.silver;
-    dateOfData = `Daily (${backup.date})`;
-    // Charts stay empty, but prices are real.
-  } else {
-    // PLAN C: Everything is broken (Internet down?)
-    goldPrice = 2500; silverPrice = 30;
-    dateOfData = "Offline Estimate";
-  }
+  // Fallback if CoinGecko rate limits us
+  goldPrice = 2500; silverPrice = 30;
+  dateOfData = "Offline Estimate";
 }
 
-// Historical Data for Profit Calc
 const historicalData = {
   2010: { gold: 1224, silver: 20.19 },
   2011: { gold: 1571, silver: 35.12 },
@@ -147,8 +133,8 @@ const historicalData = {
       .chart-stack { display: flex; flex-direction: column; gap: 15px; }
       .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
       .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
-      .svg-container { flex-grow: 1; position: relative; height: 120px; min-height: 120px; display: flex; align-items: center; justify-content: center;}
-      .no-chart { font-size: 0.8rem; color: #ccc; font-style: italic; }
+      .svg-container { flex-grow: 1; position: relative; height: 120px; min-height: 120px; display: flex; align-items: center; justify-content: center; }
+      .no-chart { font-size: 0.8rem; color: #999; font-style: italic; background: #f9f9f9; padding: 10px 20px; border-radius: 20px; }
       svg { width: 100%; height: 100%; overflow: visible; }
       polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 
@@ -157,21 +143,20 @@ const historicalData = {
     </style>
   </head>
   <body>
-
     <div class="dashboard">
       <div class="header-section">
         <h1>Metal Tracker</h1>
-        <span class="badge">Market Data: {dateOfData}</span>
+        <span class="badge">Source: {dateOfData}</span>
       </div>
 
       <div class="card">
         <div class="price-grid">
           <div class="price-item">
-            <div class="lbl">Gold (Spot)</div>
+            <div class="lbl">Gold (PAXG)</div>
             <div class="val" style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
           </div>
           <div class="price-item">
-            <div class="lbl">Silver (Spot)</div>
+            <div class="lbl">Silver (KAG)</div>
             <div class="val" style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
           </div>
         </div>
@@ -225,7 +210,7 @@ const historicalData = {
       </div>
 
       <div class="footer-section legal">
-        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data is from previous day end of trading time. Data may be delayed.
+        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data may be delayed.
       </div>
     </div>
 
