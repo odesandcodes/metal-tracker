@@ -1,35 +1,50 @@
 ---
 // --- Server Side (Runs on Cloudflare) ---
 
-// Yahoo Finance Spot Price Data (Updates Sunday 6PM EST - Friday 5PM EST)
-const GOLD_URL = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?range=1mo&interval=1d";
-const SILVER_URL = "https://query1.finance.yahoo.com/v8/finance/chart/XAGUSD=X?range=1mo&interval=1d";
+// 1. PRIMARY SOURCE (Yahoo: Real-time, Weekend Data, Charts)
+const Y_GOLD = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?range=1mo&interval=1d";
+const Y_SILVER = "https://query1.finance.yahoo.com/v8/finance/chart/XAGUSD=X?range=1mo&interval=1d";
+
+// 2. BACKUP SOURCE (Jsdelivr: Daily updates, very reliable, no blocks)
+const BACKUP_API = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json";
 
 let goldPrice = 0, silverPrice = 0, dateOfData = "";
 let goldPoints = "", silverPoints = "";
+let chartAvailable = false;
 
-// Helper: Fetch Data & Extract Price + Chart Points
-async function getMetalData(url) {
+// Helper: Real-looking Browser Header to bypass blocks
+const HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+};
+
+async function getYahooData(url) {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const res = await fetch(url, { headers: HEADERS });
+    if (!res.ok) throw new Error(res.statusText);
     const json = await res.json();
     const result = json.chart.result[0];
-
-    // Get the "Regular Market Price" (Live or Close)
     const price = result.meta.regularMarketPrice;
-
-    // Get history for sparkline
     const quotes = result.indicators.quote[0].close;
     const points = makeSparkline(quotes);
-
-    return { price, points };
+    return { price, points, success: true };
   } catch (e) {
-    console.error("Fetch Error:", e);
-    return null;
+    return { success: false }; // Fail silently so we can use backup
   }
 }
 
-// Helper: Draw Chart Line
+async function getBackupPrices() {
+  try {
+    const res = await fetch(BACKUP_API);
+    const data = await res.json();
+    return { 
+      gold: 1 / data.usd.xau, 
+      silver: 1 / data.usd.xag,
+      date: data.date 
+    };
+  } catch (e) { return null; }
+}
+
 function makeSparkline(data) {
   if (!data || data.length < 2) return "";
   const valid = data.filter(n => n);
@@ -42,32 +57,34 @@ function makeSparkline(data) {
   }).join(" ");
 }
 
-try {
-  // Parallel Fetch
-  const [goldData, silverData] = await Promise.all([
-    getMetalData(GOLD_URL),
-    getMetalData(SILVER_URL)
-  ]);
+// --- MAIN LOGIC ---
+// 1. Try Yahoo First (Best Data)
+const [gData, sData] = await Promise.all([getYahooData(Y_GOLD), getYahooData(Y_SILVER)]);
 
-  if (goldData && silverData) {
-    goldPrice = goldData.price;
-    goldPoints = goldData.points;
-    silverPrice = silverData.price;
-    silverPoints = silverData.points;
-    
-    // Format Date
-    dateOfData = new Date().toLocaleDateString('en-US', { 
-      month: 'short', day: 'numeric', year: 'numeric' 
-    });
+if (gData.success && sData.success) {
+  // PLAN A: Yahoo worked!
+  goldPrice = gData.price;
+  silverPrice = sData.price;
+  goldPoints = gData.points;
+  silverPoints = sData.points;
+  chartAvailable = true;
+  dateOfData = "Live (Spot)";
+} else {
+  // PLAN B: Yahoo blocked us. Use Backup for Price.
+  const backup = await getBackupPrices();
+  if (backup) {
+    goldPrice = backup.gold;
+    silverPrice = backup.silver;
+    dateOfData = `Daily (${backup.date})`;
+    // Charts stay empty, but prices are real.
   } else {
-    throw new Error("Data missing");
+    // PLAN C: Everything is broken (Internet down?)
+    goldPrice = 2500; silverPrice = 30;
+    dateOfData = "Offline Estimate";
   }
-
-} catch (e) {
-  goldPrice = 2500.00; silverPrice = 30.00; // Fallback
-  dateOfData = "Est. (Offline)";
 }
 
+// Historical Data for Profit Calc
 const historicalData = {
   2010: { gold: 1224, silver: 20.19 },
   2011: { gold: 1571, silver: 35.12 },
@@ -99,7 +116,6 @@ const historicalData = {
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
       
       .dashboard { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 15px; }
-      
       @media (min-width: 768px) {
         .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; }
         .header-section { grid-column: 1 / -1; }
@@ -107,7 +123,6 @@ const historicalData = {
       }
 
       .card { background: var(--card); padding: 1.5rem; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-      
       h1 { margin: 0; font-size: 1.5rem; text-align: center; color: #222; }
       .badge { display: block; text-align: center; font-size: 0.75rem; color: #888; margin-top: 5px; background: #fff; padding: 4px 10px; border-radius: 20px; width: fit-content; margin: 5px auto 15px auto; }
 
@@ -130,19 +145,14 @@ const historicalData = {
       button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
 
       .chart-stack { display: flex; flex-direction: column; gap: 15px; }
-      .chart-card { 
-        background: var(--card); border-radius: 16px; 
-        padding: 1.2rem; 
-        flex: 1; display: flex; flex-direction: column; justify-content: center;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); 
-      }
+      .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
       .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
-      .svg-container { flex-grow: 1; position: relative; height: 120px; min-height: 120px; }
+      .svg-container { flex-grow: 1; position: relative; height: 120px; min-height: 120px; display: flex; align-items: center; justify-content: center;}
+      .no-chart { font-size: 0.8rem; color: #ccc; font-style: italic; }
       svg { width: 100%; height: 100%; overflow: visible; }
       polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 
       .legal { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 20px; line-height: 1.4; }
-
       @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </head>
@@ -183,7 +193,6 @@ const historicalData = {
           </div>
           <div id="silverRes" class="res-box"></div>
         </div>
-
         <button id="calcBtn">Calculate Value</button>
       </div>
 
@@ -194,9 +203,10 @@ const historicalData = {
             <span style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
           </div>
           <div class="svg-container">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-              <polyline points={goldPoints} stroke="#d4af37" />
-            </svg>
+            {chartAvailable ? 
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={goldPoints} stroke="#d4af37" /></svg> 
+              : <div class="no-chart">Chart Unavailable</div>
+            }
           </div>
         </div>
 
@@ -206,15 +216,16 @@ const historicalData = {
             <span style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
           </div>
           <div class="svg-container">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-              <polyline points={silverPoints} stroke="#7f8c8d" />
-            </svg>
+            {chartAvailable ? 
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={silverPoints} stroke="#7f8c8d" /></svg> 
+              : <div class="no-chart">Chart Unavailable</div>
+            }
           </div>
         </div>
       </div>
 
       <div class="footer-section legal">
-        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data may be delayed.
+        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data is from previous day end of trading time. Data may be delayed.
       </div>
     </div>
 
@@ -244,17 +255,11 @@ const historicalData = {
           const originalCost = oz * oldPrice;
           const diff = total - originalCost;
           const isUp = diff >= 0;
-          
           const diffStr = Math.abs(diff).toLocaleString(undefined, {minimumFractionDigits: 2});
           const pct = ((diff / originalCost) * 100).toFixed(1);
           
           html += `<div style="font-size:0.85em; color:#666; margin-top:5px;">History: Bought ${year}</div>`;
-          html += `<div style="margin-top:2px; font-weight:600;">
-            ${isUp ? 'Profit' : 'Loss'}: 
-            <span class="${isUp?'up':'down'}">
-              ${isUp?'+':'-'}$${diffStr} (${isUp?'+':''}${pct}%)
-            </span>
-          </div>`;
+          html += `<div style="margin-top:2px; font-weight:600;">${isUp?'Profit':'Loss'}: <span class="${isUp?'up':'down'}">${isUp?'+':'-'}$${diffStr} (${isUp?'+':''}${pct}%)</span></div>`;
         }
         resEl.innerHTML = html;
         resEl.classList.add('visible');
