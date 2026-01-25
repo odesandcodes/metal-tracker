@@ -1,21 +1,35 @@
 ---
 // --- Server Side (Runs on Cloudflare) ---
 
-const PRICE_API = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json";
-const CHART_API_GOLD = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1d";
-const CHART_API_SILVER = "https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1mo&interval=1d";
+// Yahoo Finance Spot Price Data (Updates Sunday 6PM EST - Friday 5PM EST)
+const GOLD_URL = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?range=1mo&interval=1d";
+const SILVER_URL = "https://query1.finance.yahoo.com/v8/finance/chart/XAGUSD=X?range=1mo&interval=1d";
 
 let goldPrice = 0, silverPrice = 0, dateOfData = "";
 let goldPoints = "", silverPoints = "";
 
-async function getChartData(url) {
+// Helper: Fetch Data & Extract Price + Chart Points
+async function getMetalData(url) {
   try {
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     const json = await res.json();
-    return json.chart.result[0].indicators.quote[0].close;
-  } catch (e) { return null; }
+    const result = json.chart.result[0];
+
+    // Get the "Regular Market Price" (Live or Close)
+    const price = result.meta.regularMarketPrice;
+
+    // Get history for sparkline
+    const quotes = result.indicators.quote[0].close;
+    const points = makeSparkline(quotes);
+
+    return { price, points };
+  } catch (e) {
+    console.error("Fetch Error:", e);
+    return null;
+  }
 }
 
+// Helper: Draw Chart Line
 function makeSparkline(data) {
   if (!data || data.length < 2) return "";
   const valid = data.filter(n => n);
@@ -29,17 +43,29 @@ function makeSparkline(data) {
 }
 
 try {
-  const [priceRes, goldChart, silverChart] = await Promise.all([
-    fetch(PRICE_API), getChartData(CHART_API_GOLD), getChartData(CHART_API_SILVER)
+  // Parallel Fetch
+  const [goldData, silverData] = await Promise.all([
+    getMetalData(GOLD_URL),
+    getMetalData(SILVER_URL)
   ]);
-  const data = await priceRes.json();
-  goldPrice = 1 / data.usd.xau;
-  silverPrice = 1 / data.usd.xag;
-  dateOfData = data.date;
-  goldPoints = makeSparkline(goldChart);
-  silverPoints = makeSparkline(silverChart);
+
+  if (goldData && silverData) {
+    goldPrice = goldData.price;
+    goldPoints = goldData.points;
+    silverPrice = silverData.price;
+    silverPoints = silverData.points;
+    
+    // Format Date
+    dateOfData = new Date().toLocaleDateString('en-US', { 
+      month: 'short', day: 'numeric', year: 'numeric' 
+    });
+  } else {
+    throw new Error("Data missing");
+  }
+
 } catch (e) {
-  goldPrice = 2500; silverPrice = 30; // Fallback
+  goldPrice = 2500.00; silverPrice = 30.00; // Fallback
+  dateOfData = "Est. (Offline)";
 }
 
 const historicalData = {
@@ -72,11 +98,7 @@ const historicalData = {
       :root { --bg: #f4f4f9; --card: #ffffff; --gold: #d4af37; --silver: #7f8c8d; --text: #333; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
       
-      /* LAYOUT ENGINE */
-      .dashboard { 
-        width: 100%; max-width: 960px; 
-        display: flex; flex-direction: column; gap: 15px; 
-      }
+      .dashboard { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 15px; }
       
       @media (min-width: 768px) {
         .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; }
@@ -84,19 +106,16 @@ const historicalData = {
         .footer-section { grid-column: 1 / -1; }
       }
 
-      /* GLOBAL CARD */
       .card { background: var(--card); padding: 1.5rem; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
       
       h1 { margin: 0; font-size: 1.5rem; text-align: center; color: #222; }
       .badge { display: block; text-align: center; font-size: 0.75rem; color: #888; margin-top: 5px; background: #fff; padding: 4px 10px; border-radius: 20px; width: fit-content; margin: 5px auto 15px auto; }
 
-      /* Live Price Grid */
       .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
       .price-item { background: #fafafa; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #eee; }
       .lbl { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: #999; letter-spacing: 0.5px; }
       .val { font-size: 1.2rem; font-weight: 700; margin-top: 2px; }
 
-      /* Calculator */
       .input-group { margin-bottom: 15px; }
       .group-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
       .dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -110,7 +129,6 @@ const historicalData = {
       .down { color: #dc2626; font-weight: 700; }
       button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
 
-      /* CHARTS */
       .chart-stack { display: flex; flex-direction: column; gap: 15px; }
       .chart-card { 
         background: var(--card); border-radius: 16px; 
@@ -139,11 +157,11 @@ const historicalData = {
       <div class="card">
         <div class="price-grid">
           <div class="price-item">
-            <div class="lbl">Gold / oz</div>
+            <div class="lbl">Gold (Spot)</div>
             <div class="val" style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
           </div>
           <div class="price-item">
-            <div class="lbl">Silver / oz</div>
+            <div class="lbl">Silver (Spot)</div>
             <div class="val" style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
           </div>
         </div>
@@ -172,7 +190,7 @@ const historicalData = {
       <div class="chart-stack">
         <div class="chart-card">
           <div class="chart-header">
-            <span>Gold (30D)</span>
+            <span>Gold Trend (30D)</span>
             <span style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
           </div>
           <div class="svg-container">
@@ -184,7 +202,7 @@ const historicalData = {
 
         <div class="chart-card">
           <div class="chart-header">
-            <span>Silver (30D)</span>
+            <span>Silver Trend (30D)</span>
             <span style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
           </div>
           <div class="svg-container">
@@ -219,7 +237,6 @@ const historicalData = {
         const total = oz * price;
         const totalFormatted = total.toLocaleString(undefined, {minimumFractionDigits: 2});
         
-        // 1. Show Current Value
         let html = `<div>Current Value: <strong>$${totalFormatted}</strong></div>`;
 
         if (year && historicalData[year]) {
@@ -228,11 +245,9 @@ const historicalData = {
           const diff = total - originalCost;
           const isUp = diff >= 0;
           
-          // 2. Formatting numbers
           const diffStr = Math.abs(diff).toLocaleString(undefined, {minimumFractionDigits: 2});
           const pct = ((diff / originalCost) * 100).toFixed(1);
           
-          // 3. Show History and Explicit Gain/Loss
           html += `<div style="font-size:0.85em; color:#666; margin-top:5px;">History: Bought ${year}</div>`;
           html += `<div style="margin-top:2px; font-weight:600;">
             ${isUp ? 'Profit' : 'Loss'}: 
