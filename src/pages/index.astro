@@ -1,47 +1,41 @@
 ---
 // --- Server Side (Runs on Cloudflare) ---
 
-// DATA SOURCE: CoinGecko Public API
-// We use tokens that track physical metals to get 24/7 pricing and historical data.
-// PAXG = Paxos Gold (1 oz Gold)
-// KAG = Kinesis Silver (1 oz Silver)
+// 1. CHART DATA (30 Days - Hourly Granularity)
+const CHART_GOLD = "https://api.coingecko.com/api/v3/coins/pax-gold/market_chart?vs_currency=usd&days=30";
+const CHART_SILVER = "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=30";
 
-const GOLD_URL = "https://api.coingecko.com/api/v3/coins/pax-gold/market_chart?vs_currency=usd&days=30";
-const SILVER_URL = "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=30";
+// 2. LIVE PRICE DATA (Real-time - Updates ~60s)
+const LIVE_PRICES = "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold,kinesis-silver&vs_currencies=usd";
 
 let goldPrice = 0, silverPrice = 0, dateOfData = "";
 let goldPoints = "", silverPoints = "";
 let chartAvailable = false;
 
-// Helper: Fetch Clean API Data
-async function getMetalData(url) {
+// Helper: Fetch Raw Chart History (Array of numbers)
+async function getChartHistory(url) {
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error("API Limit or Error");
+    if (!res.ok) return null;
     const json = await res.json();
-    
-    // CoinGecko returns "prices" as an array of [timestamp, price]
-    const prices = json.prices.map(p => p[1]);
-    
-    // 1. Current Price is the last item in the array
-    const currentPrice = prices[prices.length - 1];
-    
-    // 2. Generate Chart Points
-    const points = makeSparkline(prices);
-    
-    return { price: currentPrice, points, success: true };
-  } catch (e) {
-    return { success: false };
-  }
+    // Return just the prices [1234.56, 1235.00, ...]
+    return json.prices.map(p => p[1]);
+  } catch (e) { return null; }
 }
 
-// Helper: Create SVG Polygon
+// Helper: Draw SVG Sparkline from Array
 function makeSparkline(data) {
   if (!data || data.length < 2) return "";
-  // Downsample to ~100 points to keep SVG light
+  
+  // Downsample large arrays to keep SVG light (~100 points max)
   const step = Math.ceil(data.length / 100);
   const valid = data.filter((_, i) => i % step === 0);
   
+  // Ensure the very last live point is included after filtering
+  if (valid[valid.length-1] !== data[data.length-1]) {
+    valid.push(data[data.length-1]);
+  }
+
   const min = Math.min(...valid);
   const max = Math.max(...valid);
   
@@ -52,21 +46,44 @@ function makeSparkline(data) {
   }).join(" ");
 }
 
-// --- MAIN EXECUTION ---
-const [gData, sData] = await Promise.all([
-  getMetalData(GOLD_URL),
-  getMetalData(SILVER_URL)
-]);
+// --- MAIN ROBUST EXECUTION ---
+try {
+  // 1. Fetch Everything in Parallel (Fastest)
+  const [rawGoldChart, rawSilverChart, liveRes] = await Promise.all([
+    getChartHistory(CHART_GOLD),
+    getChartHistory(CHART_SILVER),
+    fetch(LIVE_PRICES)
+  ]);
 
-if (gData.success && sData.success) {
-  goldPrice = gData.price;
-  silverPrice = sData.price;
-  goldPoints = gData.points;
-  silverPoints = sData.points;
+  const liveData = await liveDataRes(liveRes);
+
+  function liveDataRes(res) {
+    if(res.ok) return res.json();
+    throw new Error("Live price unavailable");
+  }
+
+  // 2. Set the "Big Numbers" (Live Data)
+  goldPrice = liveData["pax-gold"].usd;
+  silverPrice = liveData["kinesis-silver"].usd;
+  dateOfData = "Live Market (24/7)";
+
+  // 3. STITCH: Append Live Price to Chart History
+  // This ensures the chart line ends exactly at the current price number.
+  if (rawGoldChart) {
+    rawGoldChart.push(goldPrice); 
+    goldPoints = makeSparkline(rawGoldChart);
+  }
+  
+  if (rawSilverChart) {
+    rawSilverChart.push(silverPrice);
+    silverPoints = makeSparkline(rawSilverChart);
+  }
+  
   chartAvailable = true;
-  dateOfData = "Live (24/7 Market)";
-} else {
-  // Fallback if CoinGecko rate limits us
+
+} catch (e) {
+  // Fallback (Offline Mode)
+  console.error(e);
   goldPrice = 2500; silverPrice = 30;
   dateOfData = "Offline Estimate";
 }
@@ -94,8 +111,8 @@ const historicalData = {
 
 <html lang="en">
   <head>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Metal Dashboard</title>
     <style>
