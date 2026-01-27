@@ -1,44 +1,30 @@
 ---
 // --- Server Side (Runs on Cloudflare) ---
 
-// 1. CHART DATA (30 Days - Hourly Granularity)
 const CHART_GOLD = "https://api.coingecko.com/api/v3/coins/pax-gold/market_chart?vs_currency=usd&days=30";
 const CHART_SILVER = "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=30";
-
-// 2. LIVE PRICE DATA (Real-time - Updates ~60s)
 const LIVE_PRICES = "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold,kinesis-silver&vs_currencies=usd";
 
-let goldPrice = 0, silverPrice = 0, dateOfData = "";
+let goldPrice = 0, silverPrice = 0, timestampLabel = "";
 let goldPoints = "", silverPoints = "";
 let chartAvailable = false;
 
-// Helper: Fetch Raw Chart History (Array of numbers)
-async function getChartHistory(url) {
+// Helper: Fetch with 'no-store' to ensure the date/time is always fresh on reload
+async function getJson(url) {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return null;
-    const json = await res.json();
-    // Return just the prices [1234.56, 1235.00, ...]
-    return json.prices.map(p => p[1]);
+    return await res.json();
   } catch (e) { return null; }
 }
 
-// Helper: Draw SVG Sparkline from Array
 function makeSparkline(data) {
   if (!data || data.length < 2) return "";
-  
-  // Downsample large arrays to keep SVG light (~100 points max)
   const step = Math.ceil(data.length / 100);
   const valid = data.filter((_, i) => i % step === 0);
-  
-  // Ensure the very last live point is included after filtering
-  if (valid[valid.length-1] !== data[data.length-1]) {
-    valid.push(data[data.length-1]);
-  }
-
+  if (valid[valid.length-1] !== data[data.length-1]) valid.push(data[data.length-1]);
   const min = Math.min(...valid);
   const max = Math.max(...valid);
-  
   return valid.map((p, i) => {
     const x = (i / (valid.length - 1)) * 100;
     const y = 100 - ((p - min) / (max - min)) * 100;
@@ -46,46 +32,49 @@ function makeSparkline(data) {
   }).join(" ");
 }
 
-// --- MAIN ROBUST EXECUTION ---
 try {
-  // 1. Fetch Everything in Parallel (Fastest)
-  const [rawGoldChart, rawSilverChart, liveRes] = await Promise.all([
-    getChartHistory(CHART_GOLD),
-    getChartHistory(CHART_SILVER),
-    fetch(LIVE_PRICES)
+  // 1. Fetch Data
+  const [gChartData, sChartData, liveData] = await Promise.all([
+    getJson(CHART_GOLD),
+    getJson(CHART_SILVER),
+    getJson(LIVE_PRICES)
   ]);
 
-  const liveData = await liveDataRes(liveRes);
+  if (!liveData) throw new Error("API Limit");
 
-  function liveDataRes(res) {
-    if(res.ok) return res.json();
-    throw new Error("Live price unavailable");
-  }
-
-  // 2. Set the "Big Numbers" (Live Data)
+  // 2. Set Prices
   goldPrice = liveData["pax-gold"].usd;
   silverPrice = liveData["kinesis-silver"].usd;
-  dateOfData = "Live Market (24/7)";
+  
+  // 3. Create the "Date & Time" Label
+  // This generates a string like: "Jan 27, 2026 • 9:41 AM EST"
+  timestampLabel = new Date().toLocaleString('en-US', {
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/New_York',
+    timeZoneName: 'short'
+  });
 
-  // 3. STITCH: Append Live Price to Chart History
-  // This ensures the chart line ends exactly at the current price number.
-  if (rawGoldChart) {
-    rawGoldChart.push(goldPrice); 
-    goldPoints = makeSparkline(rawGoldChart);
+  // 4. Process Charts
+  if (gChartData && sChartData) {
+    const gPrices = gChartData.prices.map(p => p[1]);
+    const sPrices = sChartData.prices.map(p => p[1]);
+    
+    // Stitch live price to end of chart
+    gPrices.push(goldPrice);
+    sPrices.push(silverPrice);
+    
+    goldPoints = makeSparkline(gPrices);
+    silverPoints = makeSparkline(sPrices);
+    chartAvailable = true;
   }
-  
-  if (rawSilverChart) {
-    rawSilverChart.push(silverPrice);
-    silverPoints = makeSparkline(rawSilverChart);
-  }
-  
-  chartAvailable = true;
 
 } catch (e) {
-  // Fallback (Offline Mode)
-  console.error(e);
   goldPrice = 2500; silverPrice = 30;
-  dateOfData = "Offline Estimate";
+  timestampLabel = "Data Offline";
 }
 
 const historicalData = {
@@ -118,36 +107,29 @@ const historicalData = {
     <style>
       :root { --bg: #f4f4f9; --card: #ffffff; --gold: #d4af37; --silver: #7f8c8d; --text: #333; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
-      
       .dashboard { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 15px; }
-      @media (min-width: 768px) {
-        .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; }
-        .header-section { grid-column: 1 / -1; }
-        .footer-section { grid-column: 1 / -1; }
-      }
-
+      @media (min-width: 768px) { .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; } .header-section, .footer-section { grid-column: 1 / -1; } }
       .card { background: var(--card); padding: 1.5rem; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
       h1 { margin: 0; font-size: 1.5rem; text-align: center; color: #222; }
-      .badge { display: block; text-align: center; font-size: 0.75rem; color: #888; margin-top: 5px; background: #fff; padding: 4px 10px; border-radius: 20px; width: fit-content; margin: 5px auto 15px auto; }
+      
+      /* NEW BADGE STYLE */
+      .badge { display: block; text-align: center; font-size: 0.8rem; font-weight: 500; color: #666; margin-top: 5px; background: #fff; padding: 6px 14px; border-radius: 20px; width: fit-content; margin: 8px auto 15px auto; border: 1px solid #eee; }
 
       .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
       .price-item { background: #fafafa; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #eee; }
       .lbl { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: #999; letter-spacing: 0.5px; }
       .val { font-size: 1.2rem; font-weight: 700; margin-top: 2px; }
-
       .input-group { margin-bottom: 15px; }
       .group-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
       .dot { width: 8px; height: 8px; border-radius: 50%; }
       .input-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
       input { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px; box-sizing: border-box; background: #fff; -webkit-appearance: none; }
       input:focus { outline: 2px solid #333; border-color: transparent; }
-      
       .res-box { margin-top: 8px; font-size: 0.85rem; padding: 12px; background: #f8f9fa; border-radius: 8px; display: none; line-height: 1.6; }
       .res-box.visible { display: block; animation: slideDown 0.2s ease-out; }
       .up { color: #16a34a; font-weight: 700; }
       .down { color: #dc2626; font-weight: 700; }
       button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
-
       .chart-stack { display: flex; flex-direction: column; gap: 15px; }
       .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
       .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
@@ -155,7 +137,6 @@ const historicalData = {
       .no-chart { font-size: 0.8rem; color: #999; font-style: italic; background: #f9f9f9; padding: 10px 20px; border-radius: 20px; }
       svg { width: 100%; height: 100%; overflow: visible; }
       polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-
       .legal { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 20px; line-height: 1.4; }
       @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -164,7 +145,7 @@ const historicalData = {
     <div class="dashboard">
       <div class="header-section">
         <h1>Metal Tracker</h1>
-        <span class="badge">Source: {dateOfData}</span>
+        <span class="badge">Data: {timestampLabel}</span>
       </div>
 
       <div class="card">
@@ -228,7 +209,8 @@ const historicalData = {
       </div>
 
       <div class="footer-section legal">
-        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice. Data may be delayed.
+        Market Data: Global Digital Spot (PAXG/KAG).<br/>
+        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice.
       </div>
     </div>
 
