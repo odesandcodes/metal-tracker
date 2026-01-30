@@ -1,114 +1,7 @@
 ---
-// --- Server Side (Runs on Cloudflare) ---
-
-export const prerender = false; // Force dynamic server rendering
-
-// DATA SOURCE: Kraken Exchange Public API (Tier 1 Reliability)
-// Pair IDs: XAUUSD (Gold), XAGUSD (Silver)
-// Interval: 1440 (Daily / 24 Hours)
-const KRAKEN_GOLD = "https://api.kraken.com/0/public/OHLC?pair=XAUUSD&interval=1440";
-const KRAKEN_SILVER = "https://api.kraken.com/0/public/OHLC?pair=XAGUSD&interval=1440";
-
-let goldPrice = 0, silverPrice = 0;
-let dateLabel = "Loading...", nextUpdateLabel = "";
-let goldPoints = "", silverPoints = "";
-let chartAvailable = false;
-let errorMsg = "";
-
-// Helper: Fetch with strict timeout and no-cache
-async function getJson(url) {
-  try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 4000); // 4s timeout
-    const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
-    clearTimeout(id);
-    if (!res.ok) throw new Error(`Status ${res.status}`);
-    return await res.json();
-  } catch (e) { 
-    console.error("API Error:", e);
-    return null; 
-  }
-}
-
-function makeSparkline(data) {
-  if (!data || data.length < 2) return "";
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  return data.map((p, i) => {
-    const x = (i / (data.length - 1)) * 100;
-    const y = 100 - ((p - min) / (max - min)) * 100;
-    return `${x},${y}`;
-  }).join(" ");
-}
-
-try {
-  const [gData, sData] = await Promise.all([
-    getJson(KRAKEN_GOLD),
-    getJson(KRAKEN_SILVER)
-  ]);
-
-  // Kraken returns { result: { PairName: [ [time, open, high, low, close...], ... ] } }
-  // We use Object.values() to ignore the specific pair name key (e.g. XXAUZUSD)
-  if (!gData?.result || !sData?.result) throw new Error("Kraken Blocked");
-
-  const gOhcl = Object.values(gData.result)[0]; // First value is the data array
-  const sOhcl = Object.values(sData.result)[0];
-
-  // Get last 30 days only
-  const gSlice = gOhcl.slice(-30);
-  const sSlice = sOhcl.slice(-30);
-
-  // KRAKEN FORMAT: [ time(sec), open, high, low, close, vwap, volume, count ]
-  // Index 0 = Time, Index 4 = Close Price
-  const lastCandle = gSlice[gSlice.length - 1]; // Most recent daily candle
-  
-  // Note: Kraken's last candle is "incomplete/live" for today.
-  // Ideally for stability we want the *previous* fully closed candle (yesterday).
-  // But to prevent "stale" looks, we will use the current live daily candle (Index -1).
-  
-  goldPrice = parseFloat(lastCandle[4]);
-  silverPrice = parseFloat(sSlice[sSlice.length - 1][4]);
-
-  // Generate Timestamp from the candle time
-  const dataTime = new Date(lastCandle[0] * 1000);
-  const dateStr = dataTime.toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric'
-  });
-
-  dateLabel = `Data: Kraken Spot (${dateStr})`;
-  nextUpdateLabel = "Updates Live on Refresh";
-
-  // Charts
-  goldPoints = makeSparkline(gSlice.map(c => parseFloat(c[4])));
-  silverPoints = makeSparkline(sSlice.map(c => parseFloat(c[4])));
-  chartAvailable = true;
-
-} catch (e) {
-  errorMsg = e.message || "Connection Error";
-  goldPrice = 2500; silverPrice = 30; // Fail-safe
-  dateLabel = "Offline Mode";
-  nextUpdateLabel = "Check Connection";
-}
-
-const historicalData = {
-  2010: { gold: 1224, silver: 20.19 },
-  2011: { gold: 1571, silver: 35.12 },
-  2012: { gold: 1668, silver: 31.15 },
-  2013: { gold: 1411, silver: 23.79 },
-  2014: { gold: 1266, silver: 19.08 },
-  2015: { gold: 1160, silver: 15.68 },
-  2016: { gold: 1250, silver: 17.14 },
-  2017: { gold: 1257, silver: 17.04 },
-  2018: { gold: 1268, silver: 15.71 },
-  2019: { gold: 1392, silver: 16.21 },
-  2020: { gold: 1769, silver: 20.55 },
-  2021: { gold: 1798, silver: 25.14 },
-  2022: { gold: 1801, silver: 21.76 },
-  2023: { gold: 1940, silver: 23.35 },
-  2024: { gold: 2350, silver: 28.50 },
-  2025: { gold: 2650, silver: 32.00 },
-  2026: { gold: goldPrice, silver: silverPrice }
-};
+// --- Server Side (Static Shell) ---
+// We deliver the HTML instantly, but the data is fetched by the user's browser.
+export const prerender = true; 
 ---
 
 <html lang="en">
@@ -125,52 +18,49 @@ const historicalData = {
       .card { background: var(--card); padding: 1.5rem; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
       h1 { margin: 0; font-size: 1.5rem; text-align: center; color: #222; }
       
-      .badge-container { text-align: center; margin: 10px 0 20px 0; }
-      .badge { 
-        display: inline-block; 
-        font-size: 0.9rem; font-weight: 600; color: #555; 
-        background: #fff; padding: 8px 18px; border-radius: 30px; 
-        border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-      }
+      .badge-container { text-align: center; margin: 10px 0 20px 0; min-height: 50px; }
+      .badge { display: inline-block; font-size: 0.9rem; font-weight: 600; color: #555; background: #fff; padding: 8px 18px; border-radius: 30px; border: 1px solid #ddd; }
       .badge-sub { display: block; font-size: 0.75rem; color: #999; margin-top: 4px; font-weight: 400; }
-      .error-pill { color: red; font-size: 0.7rem; display: block; margin-top: 5px; }
-
+      
       .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
       .price-item { background: #fafafa; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #eee; }
       .lbl { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: #999; letter-spacing: 0.5px; }
-      .val { font-size: 1.2rem; font-weight: 700; margin-top: 2px; }
+      .val { font-size: 1.2rem; font-weight: 700; margin-top: 2px; min-height: 1.4em; }
+      
+      .chart-stack { display: flex; flex-direction: column; gap: 15px; }
+      .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 180px; }
+      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
+      .svg-container { flex-grow: 1; position: relative; height: 120px; display: flex; align-items: center; justify-content: center; }
+      .no-chart { font-size: 0.8rem; color: #999; font-style: italic; opacity: 0.7; }
+      svg { width: 100%; height: 100%; overflow: visible; opacity: 0; transition: opacity 0.5s ease; }
+      svg.loaded { opacity: 1; }
+      polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+
+      /* Skeleton Loading Animation */
+      .loading { color: transparent; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+      @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
       .input-group { margin-bottom: 15px; }
       .group-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
       .dot { width: 8px; height: 8px; border-radius: 50%; }
       .input-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
       input { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px; box-sizing: border-box; background: #fff; -webkit-appearance: none; }
-      input:focus { outline: 2px solid #333; border-color: transparent; }
       .res-box { margin-top: 8px; font-size: 0.85rem; padding: 12px; background: #f8f9fa; border-radius: 8px; display: none; line-height: 1.6; }
-      .res-box.visible { display: block; animation: slideDown 0.2s ease-out; }
+      .res-box.visible { display: block; }
       .up { color: #16a34a; font-weight: 700; }
       .down { color: #dc2626; font-weight: 700; }
       button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
-      .chart-stack { display: flex; flex-direction: column; gap: 15px; }
-      .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
-      .svg-container { flex-grow: 1; position: relative; height: 120px; min-height: 120px; display: flex; align-items: center; justify-content: center; }
-      .no-chart { font-size: 0.8rem; color: #999; font-style: italic; background: #f9f9f9; padding: 10px 20px; border-radius: 20px; }
-      svg { width: 100%; height: 100%; overflow: visible; }
-      polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-      .legal { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 20px; line-height: 1.4; }
-      @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+      .footer-section { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 20px; }
     </style>
   </head>
   <body>
     <div class="dashboard">
       <div class="header-section">
         <h1>Metal Tracker</h1>
-        
         <div class="badge-container">
-          <div class="badge">
-            {dateLabel}
-            <span class="badge-sub">{nextUpdateLabel}</span>
-            {errorMsg && <span class="error-pill">Debug: {errorMsg}</span>}
+          <div id="dateBadge" class="badge">
+            <span id="dateText">Connecting...</span>
+            <span id="nextUpdateText" class="badge-sub">Live Market Feed</span>
           </div>
         </div>
       </div>
@@ -179,29 +69,22 @@ const historicalData = {
         <div class="price-grid">
           <div class="price-item">
             <div class="lbl">Gold (Spot)</div>
-            <div class="val" style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
+            <div id="goldVal" class="val loading">0000</div>
           </div>
           <div class="price-item">
             <div class="lbl">Silver (Spot)</div>
-            <div class="val" style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
+            <div id="silverVal" class="val loading">000</div>
           </div>
         </div>
 
         <div class="input-group">
           <div class="group-label"><div class="dot" style="background:var(--gold)"></div> Gold Holdings</div>
-          <div class="input-row">
-            <input type="number" step="0.01" id="goldOz" placeholder="Ounces" />
-            <input type="number" id="goldYear" placeholder="Year Purchased" min="2010" max="2026" />
-          </div>
+          <div class="input-row"><input type="number" step="0.01" id="goldOz" placeholder="Ounces" /><input type="number" id="goldYear" placeholder="Year" min="2010" max="2026" /></div>
           <div id="goldRes" class="res-box"></div>
         </div>
-
         <div class="input-group">
           <div class="group-label"><div class="dot" style="background:var(--silver)"></div> Silver Holdings</div>
-          <div class="input-row">
-            <input type="number" step="0.01" id="silverOz" placeholder="Ounces" />
-            <input type="number" id="silverYear" placeholder="Year Purchased" min="2010" max="2026" />
-          </div>
+          <div class="input-row"><input type="number" step="0.01" id="silverOz" placeholder="Ounces" /><input type="number" id="silverYear" placeholder="Year" min="2010" max="2026" /></div>
           <div id="silverRes" class="res-box"></div>
         </div>
         <button id="calcBtn">Calculate Value</button>
@@ -209,73 +92,147 @@ const historicalData = {
 
       <div class="chart-stack">
         <div class="chart-card">
-          <div class="chart-header">
-            <span>Gold Trend (30D)</span>
-            <span style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
-          </div>
-          <div class="svg-container">
-            {chartAvailable ? 
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={goldPoints} stroke="#d4af37" /></svg> 
-              : <div class="no-chart">Chart Unavailable</div>
-            }
-          </div>
+          <div class="chart-header"><span>Gold Trend (30D)</span><span id="goldTrendVal" style="color:var(--gold)">...</span></div>
+          <div class="svg-container" id="goldChartContainer"><div class="no-chart">Loading Chart...</div></div>
         </div>
-
         <div class="chart-card">
-          <div class="chart-header">
-            <span>Silver Trend (30D)</span>
-            <span style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
-          </div>
-          <div class="svg-container">
-            {chartAvailable ? 
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={silverPoints} stroke="#7f8c8d" /></svg> 
-              : <div class="no-chart">Chart Unavailable</div>
-            }
-          </div>
+          <div class="chart-header"><span>Silver Trend (30D)</span><span id="silverTrendVal" style="color:var(--silver)">...</span></div>
+          <div class="svg-container" id="silverChartContainer"><div class="no-chart">Loading Chart...</div></div>
         </div>
       </div>
 
-      <div class="footer-section legal">
-        Market Data: Kraken Exchange (Public API).<br/>
-        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice.
+      <div class="footer-section">
+        Data Source: CoinGecko (Client-Side).<br/>EDUCATIONAL USE ONLY.
       </div>
     </div>
 
-    <script define:vars={{ goldPrice, silverPrice, historicalData }}>
+    <script>
+      // API CONFIG: CoinGecko allows client-side fetch (CORS friendly)
+      // We use "vs_currency=usd" & "days=30" for history
+      const API_GOLD = "https://api.coingecko.com/api/v3/coins/pax-gold/market_chart?vs_currency=usd&days=30";
+      const API_SILVER = "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=30";
+
+      let currentGold = 0;
+      let currentSilver = 0;
+
+      // 1. Fetch Logic
+      async function fetchData() {
+        try {
+          const [gRes, sRes] = await Promise.all([fetch(API_GOLD), fetch(API_SILVER)]);
+          
+          if (!gRes.ok || !sRes.ok) throw new Error("Rate Limit");
+
+          const gData = await gRes.json();
+          const sData = await sRes.json();
+
+          // Extract Prices (Last item in array)
+          const gPrices = gData.prices.map(p => p[1]);
+          const sPrices = sData.prices.map(p => p[1]);
+
+          currentGold = gPrices[gPrices.length - 1];
+          currentSilver = sPrices[sPrices.length - 1];
+
+          updateUI(currentGold, currentSilver, gPrices, sPrices);
+          
+        } catch (e) {
+          console.error(e);
+          document.getElementById('dateText').innerText = "Data Offline";
+          document.getElementById('nextUpdateText').innerText = "Try Refreshing Later";
+          document.querySelectorAll('.val').forEach(el => el.classList.remove('loading'));
+        }
+      }
+
+      // 2. Update DOM
+      function updateUI(gPrice, sPrice, gHist, sHist) {
+        // Update Big Numbers
+        const gEl = document.getElementById('goldVal');
+        const sEl = document.getElementById('silverVal');
+        
+        gEl.innerText = '$' + gPrice.toLocaleString(undefined, {maximumFractionDigits:0});
+        sEl.innerText = '$' + sPrice.toLocaleString(undefined, {maximumFractionDigits:2});
+        
+        gEl.classList.remove('loading');
+        sEl.classList.remove('loading');
+
+        // Update Headers
+        document.getElementById('goldTrendVal').innerText = gEl.innerText;
+        document.getElementById('silverTrendVal').innerText = sEl.innerText;
+
+        // Update Badge
+        const now = new Date();
+        document.getElementById('dateText').innerText = `Live: ${now.toLocaleTimeString()}`;
+        document.getElementById('nextUpdateText').innerText = now.toLocaleDateString();
+
+        // Draw Charts
+        drawChart('goldChartContainer', gHist, '#d4af37');
+        drawChart('silverChartContainer', sHist, '#7f8c8d');
+      }
+
+      // 3. Chart Drawer
+      function drawChart(containerId, data, color) {
+        const container = document.getElementById(containerId);
+        if (!data || data.length < 2) return;
+        
+        // Downsample for performance
+        const step = Math.ceil(data.length / 100);
+        const valid = data.filter((_, i) => i % step === 0);
+        
+        const min = Math.min(...valid);
+        const max = Math.max(...valid);
+        
+        const points = valid.map((p, i) => {
+          const x = (i / (valid.length - 1)) * 100;
+          const y = 100 - ((p - min) / (max - min)) * 100;
+          return `${x},${y}`;
+        }).join(" ");
+
+        container.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="loaded"><polyline points="${points}" stroke="${color}" /></svg>`;
+      }
+
+      // 4. Calculator Logic
+      const historyDB = {
+        2010: { gold: 1224, silver: 20.19 }, 2011: { gold: 1571, silver: 35.12 },
+        2012: { gold: 1668, silver: 31.15 }, 2013: { gold: 1411, silver: 23.79 },
+        2014: { gold: 1266, silver: 19.08 }, 2015: { gold: 1160, silver: 15.68 },
+        2016: { gold: 1250, silver: 17.14 }, 2017: { gold: 1257, silver: 17.04 },
+        2018: { gold: 1268, silver: 15.71 }, 2019: { gold: 1392, silver: 16.21 },
+        2020: { gold: 1769, silver: 20.55 }, 2021: { gold: 1798, silver: 25.14 },
+        2022: { gold: 1801, silver: 21.76 }, 2023: { gold: 1940, silver: 23.35 },
+        2024: { gold: 2350, silver: 28.50 }, 2025: { gold: 2650, silver: 32.00 },
+        2026: { gold: 0, silver: 0 } // Gets filled dynamically
+      };
+
       document.getElementById('calcBtn').addEventListener('click', () => {
-        runCalc('gold', goldPrice);
-        runCalc('silver', silverPrice);
+        runCalc('gold', currentGold);
+        runCalc('silver', currentSilver);
       });
 
       function runCalc(type, price) {
-        const ozEl = document.getElementById(type+'Oz');
-        const yearEl = document.getElementById(type+'Year');
+        const oz = parseFloat(document.getElementById(type+'Oz').value);
+        const year = document.getElementById(type+'Year').value;
         const resEl = document.getElementById(type+'Res');
-        
-        const oz = parseFloat(ozEl.value);
-        const year = yearEl.value;
 
         if (!oz) { resEl.classList.remove('visible'); return; }
 
         const total = oz * price;
-        const totalFormatted = total.toLocaleString(undefined, {minimumFractionDigits: 2});
-        
-        let html = `<div>Current Value: <strong>$${totalFormatted}</strong></div>`;
+        const totalStr = total.toLocaleString(undefined, {minimumFractionDigits: 2});
+        let html = `<div>Value: <strong>$${totalStr}</strong></div>`;
 
-        if (year && historicalData[year]) {
-          const oldPrice = historicalData[year][type];
-          const originalCost = oz * oldPrice;
-          const diff = total - originalCost;
+        if (year && historyDB[year]) {
+          const buyPrice = historyDB[year][type] || price; // Fallback if 2026
+          const cost = oz * buyPrice;
+          const diff = total - cost;
           const isUp = diff >= 0;
-          const diffStr = Math.abs(diff).toLocaleString(undefined, {minimumFractionDigits: 2});
-          const pct = ((diff / originalCost) * 100).toFixed(1);
-          
-          html += `<div style="font-size:0.85em; color:#666; margin-top:5px;">History: Bought ${year}</div>`;
-          html += `<div style="margin-top:2px; font-weight:600;">${isUp?'Profit':'Loss'}: <span class="${isUp?'up':'down'}">${isUp?'+':'-'}$${diffStr} (${isUp?'+':''}${pct}%)</span></div>`;
+          const pct = ((diff / cost) * 100).toFixed(1);
+          html += `<div style="font-size:0.85em;color:#666;margin-top:5px">History: Bought ${year}</div>`;
+          html += `<div style="margin-top:2px;font-weight:600;">${isUp?'Profit':'Loss'}: <span class="${isUp?'up':'down'}">${isUp?'+':'-'}$${Math.abs(diff).toLocaleString(undefined,{minimumFractionDigits:2})} (${pct}%)</span></div>`;
         }
         resEl.innerHTML = html;
         resEl.classList.add('visible');
       }
+
+      // Start
+      fetchData();
     </script>
   </body>
 </html>
