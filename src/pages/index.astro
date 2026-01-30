@@ -1,6 +1,5 @@
 ---
 // --- Server Side (Static Shell) ---
-// We deliver the HTML instantly, but the data is fetched by the user's browser.
 export const prerender = true; 
 ---
 
@@ -9,113 +8,110 @@ export const prerender = true;
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Metal Dashboard</title>
+    <title>Metalz-Calc</title>
     <style>
       :root { --bg: #f4f4f9; --card: #ffffff; --gold: #d4af37; --silver: #7f8c8d; --text: #333; }
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
-      .dashboard { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 15px; }
-      @media (min-width: 768px) { .dashboard { display: grid; grid-template-columns: 1.8fr 1fr; align-items: start; gap: 20px; } .header-section, .footer-section { grid-column: 1 / -1; } }
-      .card { background: var(--card); padding: 1.5rem; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-      h1 { margin: 0; font-size: 1.5rem; text-align: center; color: #222; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 20px; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
       
-      .badge-container { text-align: center; margin: 10px 0 20px 0; min-height: 50px; }
-      .badge { display: inline-block; font-size: 0.9rem; font-weight: 600; color: #555; background: #fff; padding: 8px 18px; border-radius: 30px; border: 1px solid #ddd; }
-      .badge-sub { display: block; font-size: 0.75rem; color: #999; margin-top: 4px; font-weight: 400; }
+      .dashboard { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 20px; }
       
-      .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-      .price-item { background: #fafafa; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #eee; }
-      .lbl { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: #999; letter-spacing: 0.5px; }
-      .val { font-size: 1.2rem; font-weight: 700; margin-top: 2px; min-height: 1.4em; }
+      .card { background: var(--card); padding: 2rem; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.05); }
       
-      .chart-stack { display: flex; flex-direction: column; gap: 15px; }
-      .chart-card { background: var(--card); border-radius: 16px; padding: 1.2rem; flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 180px; }
-      .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 700; color: #555; }
-      .svg-container { flex-grow: 1; position: relative; height: 120px; display: flex; align-items: center; justify-content: center; }
-      .no-chart { font-size: 0.8rem; color: #999; font-style: italic; opacity: 0.7; }
-      svg { width: 100%; height: 100%; overflow: visible; opacity: 0; transition: opacity 0.5s ease; }
-      svg.loaded { opacity: 1; }
-      polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-
-      /* Skeleton Loading Animation */
-      .loading { color: transparent; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+      h1 { margin: 0; font-size: 2rem; text-align: center; color: #222; font-weight: 800; letter-spacing: -0.5px; }
+      
+      .badge-container { text-align: center; margin: 10px 0 25px 0; }
+      .badge { display: inline-block; font-size: 0.85rem; font-weight: 600; color: #555; background: #fff; padding: 6px 16px; border-radius: 30px; border: 1px solid #e0e0e0; }
+      .badge-sub { display: block; font-size: 0.7rem; color: #999; margin-top: 3px; font-weight: 400; }
+      
+      .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+      .price-item { background: #fafafa; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #eee; }
+      .lbl { font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: #999; letter-spacing: 0.5px; margin-bottom: 4px; }
+      .val { font-size: 1.4rem; font-weight: 700; color: #333; }
+      
+      /* Loading Animation */
+      .loading { color: transparent; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; display: inline-block; width: 80px; height: 1.4rem; }
       @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-      .input-group { margin-bottom: 15px; }
-      .group-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-      .dot { width: 8px; height: 8px; border-radius: 50%; }
+      .input-group { margin-bottom: 20px; }
+      .group-label { font-size: 0.95rem; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; }
       .input-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
-      input { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px; box-sizing: border-box; background: #fff; -webkit-appearance: none; }
-      .res-box { margin-top: 8px; font-size: 0.85rem; padding: 12px; background: #f8f9fa; border-radius: 8px; display: none; line-height: 1.6; }
-      .res-box.visible { display: block; }
+      
+      input { width: 100%; padding: 14px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 16px; box-sizing: border-box; background: #fff; -webkit-appearance: none; transition: border 0.2s; }
+      input:focus { outline: none; border-color: #333; }
+      
+      .res-box { margin-top: 10px; font-size: 0.9rem; padding: 15px; background: #f8f9fa; border-radius: 10px; display: none; line-height: 1.5; border-left: 4px solid #ccc; }
+      .res-box.visible { display: block; animation: slideDown 0.2s ease-out; }
+      
       .up { color: #16a34a; font-weight: 700; }
       .down { color: #dc2626; font-weight: 700; }
-      button { width: 100%; background: #222; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 5px; }
-      .footer-section { text-align: center; font-size: 0.7rem; color: #aaa; margin-top: 20px; }
+      
+      button { width: 100%; background: #222; color: #fff; border: none; padding: 16px; border-radius: 12px; font-size: 1.1rem; font-weight: 600; cursor: pointer; margin-top: 10px; transition: background 0.2s; }
+      button:active { transform: scale(0.98); }
+      
+      .footer-section { text-align: center; font-size: 0.75rem; color: #aaa; margin-top: 30px; line-height: 1.5; }
+      
+      @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </head>
   <body>
     <div class="dashboard">
-      <div class="header-section">
-        <h1>Metal Tracker</h1>
+      
+      <div class="card">
+        <h1>Metalz-Calc</h1>
+        
         <div class="badge-container">
-          <div id="dateBadge" class="badge">
+          <div class="badge">
             <span id="dateText">Connecting...</span>
-            <span id="nextUpdateText" class="badge-sub">Live Market Feed</span>
+            <span id="nextUpdateText" class="badge-sub">Checking Live Prices</span>
           </div>
         </div>
-      </div>
 
-      <div class="card">
         <div class="price-grid">
           <div class="price-item">
-            <div class="lbl">Gold (Spot)</div>
-            <div id="goldVal" class="val loading">0000</div>
+            <div class="lbl">Gold / oz</div>
+            <div id="goldVal" class="val loading"></div>
           </div>
           <div class="price-item">
-            <div class="lbl">Silver (Spot)</div>
-            <div id="silverVal" class="val loading">000</div>
+            <div class="lbl">Silver / oz</div>
+            <div id="silverVal" class="val loading"></div>
           </div>
         </div>
 
         <div class="input-group">
           <div class="group-label"><div class="dot" style="background:var(--gold)"></div> Gold Holdings</div>
-          <div class="input-row"><input type="number" step="0.01" id="goldOz" placeholder="Ounces" /><input type="number" id="goldYear" placeholder="Year" min="2010" max="2026" /></div>
+          <div class="input-row">
+            <input type="number" step="0.01" id="goldOz" placeholder="Ounces" />
+            <input type="number" id="goldYear" placeholder="Year Bought" min="1995" max="2026" />
+          </div>
           <div id="goldRes" class="res-box"></div>
         </div>
+
         <div class="input-group">
           <div class="group-label"><div class="dot" style="background:var(--silver)"></div> Silver Holdings</div>
-          <div class="input-row"><input type="number" step="0.01" id="silverOz" placeholder="Ounces" /><input type="number" id="silverYear" placeholder="Year" min="2010" max="2026" /></div>
+          <div class="input-row">
+            <input type="number" step="0.01" id="silverOz" placeholder="Ounces" />
+            <input type="number" id="silverYear" placeholder="Year Bought" min="1995" max="2026" />
+          </div>
           <div id="silverRes" class="res-box"></div>
         </div>
+
         <button id="calcBtn">Calculate Value</button>
       </div>
 
-      <div class="chart-stack">
-        <div class="chart-card">
-          <div class="chart-header"><span>Gold Trend (30D)</span><span id="goldTrendVal" style="color:var(--gold)">...</span></div>
-          <div class="svg-container" id="goldChartContainer"><div class="no-chart">Loading Chart...</div></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-header"><span>Silver Trend (30D)</span><span id="silverTrendVal" style="color:var(--silver)">...</span></div>
-          <div class="svg-container" id="silverChartContainer"><div class="no-chart">Loading Chart...</div></div>
-        </div>
-      </div>
-
       <div class="footer-section">
-        Data Source: CoinGecko (Client-Side).<br/>EDUCATIONAL USE ONLY.
+        Source: CoinGecko (PAXG/KAG).<br/>
+        <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice.
       </div>
     </div>
 
     <script>
-      // API CONFIG: CoinGecko allows client-side fetch (CORS friendly)
-      // We use "vs_currency=usd" & "days=30" for history
-      const API_GOLD = "https://api.coingecko.com/api/v3/coins/pax-gold/market_chart?vs_currency=usd&days=30";
-      const API_SILVER = "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=30";
+      const API_GOLD = "https://api.coingecko.com/api/v3/coins/pax-gold/market_chart?vs_currency=usd&days=1";
+      const API_SILVER = "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=1";
 
       let currentGold = 0;
       let currentSilver = 0;
 
-      // 1. Fetch Logic
       async function fetchData() {
         try {
           const [gRes, sRes] = await Promise.all([fetch(API_GOLD), fetch(API_SILVER)]);
@@ -125,26 +121,25 @@ export const prerender = true;
           const gData = await gRes.json();
           const sData = await sRes.json();
 
-          // Extract Prices (Last item in array)
-          const gPrices = gData.prices.map(p => p[1]);
-          const sPrices = sData.prices.map(p => p[1]);
+          const gPrices = gData.prices;
+          const sPrices = sData.prices;
 
-          currentGold = gPrices[gPrices.length - 1];
-          currentSilver = sPrices[sPrices.length - 1];
+          currentGold = gPrices[gPrices.length - 1][1];
+          currentSilver = sPrices[sPrices.length - 1][1];
 
-          updateUI(currentGold, currentSilver, gPrices, sPrices);
+          updateUI(currentGold, currentSilver);
           
         } catch (e) {
           console.error(e);
-          document.getElementById('dateText').innerText = "Data Offline";
-          document.getElementById('nextUpdateText').innerText = "Try Refreshing Later";
-          document.querySelectorAll('.val').forEach(el => el.classList.remove('loading'));
+          document.getElementById('dateText').innerText = "Offline Mode";
+          document.getElementById('nextUpdateText').innerText = "Try Refreshing";
+          currentGold = 5000;
+          currentSilver = 100;
+          updateUI(currentGold, currentSilver);
         }
       }
 
-      // 2. Update DOM
-      function updateUI(gPrice, sPrice, gHist, sHist) {
-        // Update Big Numbers
+      function updateUI(gPrice, sPrice) {
         const gEl = document.getElementById('goldVal');
         const sEl = document.getElementById('silverVal');
         
@@ -154,52 +149,45 @@ export const prerender = true;
         gEl.classList.remove('loading');
         sEl.classList.remove('loading');
 
-        // Update Headers
-        document.getElementById('goldTrendVal').innerText = gEl.innerText;
-        document.getElementById('silverTrendVal').innerText = sEl.innerText;
-
-        // Update Badge
         const now = new Date();
-        document.getElementById('dateText').innerText = `Live: ${now.toLocaleTimeString()}`;
+        document.getElementById('dateText').innerText = `Live: ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
         document.getElementById('nextUpdateText').innerText = now.toLocaleDateString();
-
-        // Draw Charts
-        drawChart('goldChartContainer', gHist, '#d4af37');
-        drawChart('silverChartContainer', sHist, '#7f8c8d');
       }
 
-      // 3. Chart Drawer
-      function drawChart(containerId, data, color) {
-        const container = document.getElementById(containerId);
-        if (!data || data.length < 2) return;
-        
-        // Downsample for performance
-        const step = Math.ceil(data.length / 100);
-        const valid = data.filter((_, i) => i % step === 0);
-        
-        const min = Math.min(...valid);
-        const max = Math.max(...valid);
-        
-        const points = valid.map((p, i) => {
-          const x = (i / (valid.length - 1)) * 100;
-          const y = 100 - ((p - min) / (max - min)) * 100;
-          return `${x},${y}`;
-        }).join(" ");
-
-        container.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="loaded"><polyline points="${points}" stroke="${color}" /></svg>`;
-      }
-
-      // 4. Calculator Logic
+      // EXPANDED HISTORY DATA (1995 - 2026)
       const historyDB = {
-        2010: { gold: 1224, silver: 20.19 }, 2011: { gold: 1571, silver: 35.12 },
-        2012: { gold: 1668, silver: 31.15 }, 2013: { gold: 1411, silver: 23.79 },
-        2014: { gold: 1266, silver: 19.08 }, 2015: { gold: 1160, silver: 15.68 },
-        2016: { gold: 1250, silver: 17.14 }, 2017: { gold: 1257, silver: 17.04 },
-        2018: { gold: 1268, silver: 15.71 }, 2019: { gold: 1392, silver: 16.21 },
-        2020: { gold: 1769, silver: 20.55 }, 2021: { gold: 1798, silver: 25.14 },
-        2022: { gold: 1801, silver: 21.76 }, 2023: { gold: 1940, silver: 23.35 },
-        2024: { gold: 2350, silver: 28.50 }, 2025: { gold: 2650, silver: 32.00 },
-        2026: { gold: 0, silver: 0 } // Gets filled dynamically
+        1995: { gold: 384, silver: 5.20 },
+        1996: { gold: 387, silver: 5.19 },
+        1997: { gold: 331, silver: 4.89 },
+        1998: { gold: 294, silver: 5.54 },
+        1999: { gold: 278, silver: 5.22 },
+        2000: { gold: 279, silver: 4.95 },
+        2001: { gold: 271, silver: 4.37 },
+        2002: { gold: 310, silver: 4.60 },
+        2003: { gold: 363, silver: 4.85 },
+        2004: { gold: 409, silver: 6.66 },
+        2005: { gold: 444, silver: 7.31 },
+        2006: { gold: 603, silver: 11.55 },
+        2007: { gold: 695, silver: 13.38 },
+        2008: { gold: 871, silver: 14.99 },
+        2009: { gold: 972, silver: 14.67 },
+        2010: { gold: 1224, silver: 20.19 }, 
+        2011: { gold: 1571, silver: 35.12 },
+        2012: { gold: 1668, silver: 31.15 }, 
+        2013: { gold: 1411, silver: 23.79 },
+        2014: { gold: 1266, silver: 19.08 }, 
+        2015: { gold: 1160, silver: 15.68 },
+        2016: { gold: 1250, silver: 17.14 }, 
+        2017: { gold: 1257, silver: 17.04 },
+        2018: { gold: 1268, silver: 15.71 }, 
+        2019: { gold: 1392, silver: 16.21 },
+        2020: { gold: 1769, silver: 20.55 }, 
+        2021: { gold: 1798, silver: 25.14 },
+        2022: { gold: 1801, silver: 21.76 }, 
+        2023: { gold: 1940, silver: 23.35 },
+        2024: { gold: 2350, silver: 28.50 }, 
+        2025: { gold: 2650, silver: 32.00 },
+        2026: { gold: 0, silver: 0 }
       };
 
       document.getElementById('calcBtn').addEventListener('click', () => {
@@ -216,14 +204,16 @@ export const prerender = true;
 
         const total = oz * price;
         const totalStr = total.toLocaleString(undefined, {minimumFractionDigits: 2});
-        let html = `<div>Value: <strong>$${totalStr}</strong></div>`;
+        
+        let html = `<div>Current Value: <strong>$${totalStr}</strong></div>`;
 
         if (year && historyDB[year]) {
-          const buyPrice = historyDB[year][type] || price; // Fallback if 2026
+          const buyPrice = historyDB[year][type] || price;
           const cost = oz * buyPrice;
           const diff = total - cost;
           const isUp = diff >= 0;
           const pct = ((diff / cost) * 100).toFixed(1);
+          
           html += `<div style="font-size:0.85em;color:#666;margin-top:5px">History: Bought ${year}</div>`;
           html += `<div style="margin-top:2px;font-weight:600;">${isUp?'Profit':'Loss'}: <span class="${isUp?'up':'down'}">${isUp?'+':'-'}$${Math.abs(diff).toLocaleString(undefined,{minimumFractionDigits:2})} (${pct}%)</span></div>`;
         }
@@ -231,7 +221,6 @@ export const prerender = true;
         resEl.classList.add('visible');
       }
 
-      // Start
       fetchData();
     </script>
   </body>
