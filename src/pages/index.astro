@@ -3,23 +3,31 @@
 
 export const prerender = false; // Force dynamic server rendering
 
-// DATA SOURCE: CryptoCompare (Friendly to Server-Side Requests)
-// fsym = From Symbol, tsym = To Symbol, limit = 30 days
-const CHART_GOLD = "https://min-api.cryptocompare.com/data/v2/histoday?fsym=PAXG&tsym=USD&limit=30";
-const CHART_SILVER = "https://min-api.cryptocompare.com/data/v2/histoday?fsym=XAG&tsym=USD&limit=30";
+// DATA SOURCE: Kraken Exchange Public API (Tier 1 Reliability)
+// Pair IDs: XAUUSD (Gold), XAGUSD (Silver)
+// Interval: 1440 (Daily / 24 Hours)
+const KRAKEN_GOLD = "https://api.kraken.com/0/public/OHLC?pair=XAUUSD&interval=1440";
+const KRAKEN_SILVER = "https://api.kraken.com/0/public/OHLC?pair=XAGUSD&interval=1440";
 
 let goldPrice = 0, silverPrice = 0;
 let dateLabel = "Loading...", nextUpdateLabel = "";
 let goldPoints = "", silverPoints = "";
 let chartAvailable = false;
+let errorMsg = "";
 
-// Helper: Fetch Data
+// Helper: Fetch with strict timeout and no-cache
 async function getJson(url) {
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 4000); // 4s timeout
+    const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+    clearTimeout(id);
+    if (!res.ok) throw new Error(`Status ${res.status}`);
     return await res.json();
-  } catch (e) { return null; }
+  } catch (e) { 
+    console.error("API Error:", e);
+    return null; 
+  }
 }
 
 function makeSparkline(data) {
@@ -34,53 +42,52 @@ function makeSparkline(data) {
 }
 
 try {
-  // 1. Fetch Daily Charts from CryptoCompare
   const [gData, sData] = await Promise.all([
-    getJson(CHART_GOLD),
-    getJson(CHART_SILVER)
+    getJson(KRAKEN_GOLD),
+    getJson(KRAKEN_SILVER)
   ]);
 
-  // CryptoCompare puts data inside { Data: { Data: [...] } }
-  // We check if the response has the data array
-  if (!gData?.Data?.Data || !sData?.Data?.Data) throw new Error("API Blocked");
+  // Kraken returns { result: { PairName: [ [time, open, high, low, close...], ... ] } }
+  // We use Object.values() to ignore the specific pair name key (e.g. XXAUZUSD)
+  if (!gData?.result || !sData?.result) throw new Error("Kraken Blocked");
 
-  const gHistory = gData.Data.Data;
-  const sHistory = sData.Data.Data;
+  const gOhcl = Object.values(gData.result)[0]; // First value is the data array
+  const sOhcl = Object.values(sData.result)[0];
 
-  // 2. Extract "Official Close" (Last item in array)
-  // Each item looks like: { time: 12345678, close: 5000.00, ... }
-  const gLast = gHistory[gHistory.length - 1];
-  const sLast = sHistory[sHistory.length - 1];
+  // Get last 30 days only
+  const gSlice = gOhcl.slice(-30);
+  const sSlice = sOhcl.slice(-30);
 
-  goldPrice = gLast.close;
-  silverPrice = sLast.close;
-
-  // 3. Generate Timestamps
-  // API uses Unix timestamp (seconds), multiply by 1000 for JS Date (ms)
-  const lastCloseDate = new Date(gLast.time * 1000);
+  // KRAKEN FORMAT: [ time(sec), open, high, low, close, vwap, volume, count ]
+  // Index 0 = Time, Index 4 = Close Price
+  const lastCandle = gSlice[gSlice.length - 1]; // Most recent daily candle
   
-  const closeDateStr = lastCloseDate.toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC'
+  // Note: Kraken's last candle is "incomplete/live" for today.
+  // Ideally for stability we want the *previous* fully closed candle (yesterday).
+  // But to prevent "stale" looks, we will use the current live daily candle (Index -1).
+  
+  goldPrice = parseFloat(lastCandle[4]);
+  silverPrice = parseFloat(sSlice[sSlice.length - 1][4]);
+
+  // Generate Timestamp from the candle time
+  const dataTime = new Date(lastCandle[0] * 1000);
+  const dateStr = dataTime.toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
   });
 
-  const nextUpdate = new Date(lastCloseDate);
-  nextUpdate.setDate(lastCloseDate.getDate() + 1);
-  const nextUpdateStr = nextUpdate.toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', timeZone: 'UTC'
-  });
+  dateLabel = `Data: Kraken Spot (${dateStr})`;
+  nextUpdateLabel = "Updates Live on Refresh";
 
-  dateLabel = `Data: Close of ${closeDateStr}`;
-  nextUpdateLabel = `Next Update: ${nextUpdateStr} (Midnight UTC)`;
-
-  // 4. Draw Charts (Map the 'close' property from the history array)
-  goldPoints = makeSparkline(gHistory.map(d => d.close));
-  silverPoints = makeSparkline(sHistory.map(d => d.close));
+  // Charts
+  goldPoints = makeSparkline(gSlice.map(c => parseFloat(c[4])));
+  silverPoints = makeSparkline(sSlice.map(c => parseFloat(c[4])));
   chartAvailable = true;
 
 } catch (e) {
-  console.error("Fetch Error:", e);
-  goldPrice = 2500; silverPrice = 30;
-  dateLabel = "Data Offline";
+  errorMsg = e.message || "Connection Error";
+  goldPrice = 2500; silverPrice = 30; // Fail-safe
+  dateLabel = "Offline Mode";
+  nextUpdateLabel = "Check Connection";
 }
 
 const historicalData = {
@@ -126,6 +133,7 @@ const historicalData = {
         border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
       }
       .badge-sub { display: block; font-size: 0.75rem; color: #999; margin-top: 4px; font-weight: 400; }
+      .error-pill { color: red; font-size: 0.7rem; display: block; margin-top: 5px; }
 
       .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
       .price-item { background: #fafafa; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #eee; }
@@ -162,6 +170,7 @@ const historicalData = {
           <div class="badge">
             {dateLabel}
             <span class="badge-sub">{nextUpdateLabel}</span>
+            {errorMsg && <span class="error-pill">Debug: {errorMsg}</span>}
           </div>
         </div>
       </div>
@@ -169,11 +178,11 @@ const historicalData = {
       <div class="card">
         <div class="price-grid">
           <div class="price-item">
-            <div class="lbl">Gold (Close)</div>
+            <div class="lbl">Gold (Spot)</div>
             <div class="val" style="color:var(--gold)">${goldPrice.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
           </div>
           <div class="price-item">
-            <div class="lbl">Silver (Close)</div>
+            <div class="lbl">Silver (Spot)</div>
             <div class="val" style="color:var(--silver)">${silverPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
           </div>
         </div>
@@ -227,7 +236,7 @@ const historicalData = {
       </div>
 
       <div class="footer-section legal">
-        Market Data: CryptoCompare (Daily Close).<br/>
+        Market Data: Kraken Exchange (Public API).<br/>
         <strong>EDUCATIONAL USE ONLY.</strong> Not financial advice.
       </div>
     </div>
