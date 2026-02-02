@@ -98,3 +98,4 @@ This project is configured for **Cloudflare Pages**.
 This tool uses digital asset proxies (PAXG/KAG) to estimate the value of physical bullion. While these assets track spot prices closely (99%+ correlation), they are not a substitute for professional financial data terminals.
 
 **License:** MIT# trigger
+# trigger
