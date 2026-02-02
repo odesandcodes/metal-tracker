@@ -1,0 +1,36 @@
+name: Dual deploy - cf pages and aws
+
+on:
+  push:
+    branches: [main]
+    
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps: 
+      - uses: actions/checkout@v4
+
+      - name: Build Astro Site
+        run: |
+          npm install
+          npm run build
+
+      # Target 1: Cloudflare pages
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: metal-tracker
+          directory: dist
+
+      # Target 2: AWS S3
+      - name: Deploy to AWS S3
+        uses: Burnett01/rsync-deployment@7.0.1
+        with:
+          switches: -avzr --delete
+          path: ./dist 
+          remote_path: /var/www/metal-tracker/dist
+          remote_host: 18.208.126.241
+          remote_user: ubuntu
+          remote-key: ${{ secrets.EC2_SSH_KEY }}
