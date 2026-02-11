@@ -1,101 +1,93 @@
-# Metal Wealth Tracker 🪙
+# Metalz-Calc
 
-A robust, server-side rendered (SSR) dashboard for tracking the value of Gold and Silver holdings. 
+Precious metals portfolio calculator with live pricing and historical profit/loss tracking.
 
-**Live Demo:** [https://metal-tracker.pages.dev](https://metal-tracker.pages.dev)
+**Live:** [metal.odesandcodes.com](https://metal.odesandcodes.com)
 
----
+## Features
 
-## 📖 Overview
-This application provides a "Stable View" of the precious metals market. Instead of chasing volatile, second-by-second ticker prices, it locks onto the **Official Daily Close** (00:00 UTC). 
+- 💰 **Live pricing** - Real-time gold and silver prices via CoinGecko API
+- 📊 **Visual breakdown** - Animated donut chart showing portfolio allocation
+- 📈 **Historical tracking** - Calculate profit/loss from purchase year (1995-2026)
+- 🎯 **Simple interface** - Enter ounces and purchase year, get instant valuation
+- 📱 **Responsive design** - Works seamlessly on mobile and desktop
+- ⚡ **Client-side only** - All calculations happen in browser, no server processing
 
-This ensures that whenever you check the app during the day, the numbers are rock-solid, consistent, and match the official charts, providing a calm and accurate reference point for long-term investors.
+## How It Works
 
-### Key Features
-* **Institutional Grade Data:** Uses **PAX Gold (PAXG)** and **Kinesis Silver (KAG)** daily closing candles to ensure weekend and holiday data availability (24/7 markets).
-* **Server-Side Rendering (SSR):** Charts and prices are fetched and rendered on the server (Cloudflare Edge) before the HTML ever reaches your phone. This results in instant load times and zero API exposure to the client.
-* **Wealth Calculator:** Enter your holdings (Ounces & Year Bought) to instantly see Current Value, Profit/Loss ($), and ROI (%).
-* **Zero-Ambiguity UI:** Clearly labels the "Data Date" and "Next Scheduled Update" so you always know exactly how fresh the numbers are.
+1. **Live prices** load from CoinGecko (gold via PAX Gold, silver via Kinesis Silver)
+2. Enter your **ounces** for gold and/or silver
+3. Optionally enter **purchase year** to see profit/loss
+4. Click **Calculate Value**
+5. See total worth, allocation percentages, and gains/losses
 
----
+## Historical Data
 
-## 🏗 Architecture & Logic
+Includes average annual prices from 1995-2026 for:
+- Gold (per troy ounce)
+- Silver (per troy ounce)
 
-### 1. The Stack
-* **Framework:** [Astro](https://astro.build) (Node.js based, geared for content-heavy sites).
-* **Adapter:** `@astrojs/cloudflare` (Enables Server-Side Rendering on Cloudflare Pages).
-* **Hosting:** Cloudflare Pages (Global Edge Network).
-* **Styling:** Native CSS (Grid/Flexbox) with no heavy frameworks like Tailwind or Bootstrap.
+Calculates ROI based on purchase year vs current market price.
 
-### 2. The Data Strategy ("The Daily Close")
-We intentionally bypass the "Simple Price" (Live Ticker) endpoint in favor of the **Historical Market Chart** endpoint.
+## Data Source
 
-* **API:** CoinGecko Public API (V3)
-* **Endpoints:**
-    * `GET /coins/pax-gold/market_chart?days=30&interval=daily`
-    * `GET /coins/kinesis-silver/market_chart?days=30&interval=daily`
-* **Logic:**
-    1.  The app fetches the last 30 days of data.
-    2.  It grabs the **last completed entry** in the array (the 00:00 UTC close).
-    3.  **Result:** The price displayed is the final, settled price of the previous trading day. It does not move until midnight UTC.
+**Live Prices:** CoinGecko API (client-side fetch)
+- Gold: PAX Gold (PAXG) as proxy for spot gold
+- Silver: Kinesis Silver (KAG) as proxy for spot silver
 
-### 3. Folder Structure
-The entire application logic lives in `src/pages/index.astro`. This is a "Single File Component" that handles everything:
+**Historical Prices:** Embedded database of annual averages (1995-2026)
 
-* **Top (Server Fence `---`):**
-    * Runs strictly on the server (Cloudflare).
-    * Fetches JSON data from CoinGecko.
-    * Calculates the "Next Update" time.
-    * Generates the SVG Sparkline paths.
-* **Middle (Template):**
-    * Standard HTML/CSS.
-    * Injects the server-calculated variables (prices, SVG paths) directly into the DOM.
-* **Bottom (Script):**
-    * Tiny client-side JavaScript.
-    * Handles the "Calculate Value" button click interaction only.
+## Tech Stack
 
----
+- **Astro** - Static site generation
+- **Vanilla JavaScript** - No frameworks
+- **CoinGecko API** - Live precious metals pricing
+- **CSS3** - Animated donut chart with conic gradients
 
-## 🚀 How to Run Locally
 
-1.  **Clone the Repo:**
-    ```bash
-    git clone [https://github.com/YOUR_USERNAME/metal-tracker.git](https://github.com/YOUR_USERNAME/metal-tracker.git)
-    cd metal-tracker
-    ```
+Automatic deployment via GitHub Actions to AWS/Caddy on push to `main`.
 
-2.  **Install Dependencies:**
-    ```bash
-    npm install
-    ```
+## Calculation Examples
 
-3.  **Run Development Server:**
-    ```bash
-    npm run dev
-    ```
-    Visit `http://localhost:4321` to see the app.
+**Example 1: Current Holdings Only**
+- 10 oz gold @ $2,800/oz = $28,000
+- 50 oz silver @ $32/oz = $1,600
+- **Total:** $29,600 (94.6% gold, 5.4% silver)
 
----
+**Example 2: With Historical Data**
+- 5 oz gold bought in 2010 @ $1,224/oz
+- Cost: $6,120 | Current: $14,000 | **Profit: +$7,880 (+128.8%)**
 
-## 📦 Deployment
-This project is configured for **Cloudflare Pages**.
+## Limitations
 
-1.  **Push to GitHub:**
-    ```bash
-    git add .
-    git commit -m "Update"
-    git push
-    ```
-2.  **Cloudflare:**
-    * Cloudflare Pages detects the push.
-    * It runs `npm run build`.
-    * It deploys the new SSR function to the global edge network.
+- Prices update on page load only (refresh for latest)
+- CoinGecko free tier has rate limits (~10-30 requests/min)
+- Historical data is annual averages, not exact purchase prices
+- Offline mode uses fallback prices ($5,000 gold, $100 silver)
+
+## Disclaimer
+
+⚠️ **EDUCATIONAL USE ONLY**
+
+This calculator is for informational and educational purposes only. It is **NOT financial advice**.
+
+- Prices are estimates and may differ from actual spot prices
+- Historical data is generalized (annual averages)
+- Does not account for premiums, storage fees, taxes, or transaction costs
+- Always consult a financial advisor for investment decisions
+
+The developer assumes no liability for financial decisions made using this tool.
+
+## Privacy
+
+- No data is stored or transmitted to any server
+- All calculations happen client-side in your browser
+- No cookies, tracking, or analytics
+
+## License
+
+MIT
 
 ---
 
-## ⚠️ Disclaimer
-**Educational Use Only.**
-This tool uses digital asset proxies (PAXG/KAG) to estimate the value of physical bullion. While these assets track spot prices closely (99%+ correlation), they are not a substitute for professional financial data terminals.
-
-**License:** MIT# trigger
-# trigger
+Data provided by CoinGecko. Historical price data compiled from public sources.
